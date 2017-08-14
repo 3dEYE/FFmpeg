@@ -24,7 +24,7 @@
 #include "avio.h"
 #include "avc.h"
 
-static const uint8_t *ff_avc_find_startcode_internal(const uint8_t *p, const uint8_t *end)
+static const uint8_t *ff_avc_find_startcode_internal_mpeg(const uint8_t *p, const uint8_t *end)
 {
     const uint8_t *a = p + 4 - ((intptr_t)p & 3);
 
@@ -61,8 +61,20 @@ static const uint8_t *ff_avc_find_startcode_internal(const uint8_t *p, const uin
     return end + 3;
 }
 
-const uint8_t *ff_avc_find_startcode(const uint8_t *p, const uint8_t *end){
-    const uint8_t *out= ff_avc_find_startcode_internal(p, end);
+static const uint8_t *ff_avc_find_startcode_internal_h264(const uint8_t *p, const uint8_t *end)
+{
+    for (end -= 3; p < end; p += 4) {
+	uint32_t x = *(const uint32_t*)p;
+
+        if (AV_RB32(x) == 0x00000001)
+            return p;
+    }
+
+    return end;
+}
+
+const uint8_t *ff_avc_find_startcode(const uint8_t *p, const uint8_t *end, int is_h264){
+    const uint8_t *out = is_h264 ? ff_avc_find_startcode_internal_h264(p, end) : ff_avc_find_startcode_internal_mpeg(p, end);
     if(p<out && out<end && !out[-1]) out--;
     return out;
 }
@@ -72,29 +84,27 @@ int ff_avc_parse_nal_units(AVIOContext *pb, const uint8_t *buf_in, int size)
     const uint8_t *p = buf_in;
     const uint8_t *end = p + size;
     const uint8_t *nal_start, *nal_end;
-    int forbidden_zero_bit;
+    int is_h264;
+
+    if(size < 3) {
+      return 0;
+    }
+
+    is_h264 = AV_RB24(buf_in) != 0x000001;
 
     size = 0;
-    nal_start = ff_avc_find_startcode(p, end);
+    nal_start = ff_avc_find_startcode(p, end, is_h264);
     for (;;) {
         while (nal_start < end && !*(nal_start++));
         if (nal_start == end)
             break;
 
-        nal_end = ff_avc_find_startcode(nal_start, end);
-
-	forbidden_zero_bit = *nal_start >> 7;
-
-	if(!forbidden_zero_bit)
-	{
-          avio_wb32(pb, nal_end - nal_start);
-          avio_write(pb, nal_start, nal_end - nal_start);
-          size += 4 + nal_end - nal_start;
-	}
-
+        nal_end = ff_avc_find_startcode(nal_start, end, is_h264);
+        avio_wb32(pb, nal_end - nal_start);
+        avio_write(pb, nal_start, nal_end - nal_start);
+        size += 4 + nal_end - nal_start;
         nal_start = nal_end;
     }
-
     return size;
 }
 

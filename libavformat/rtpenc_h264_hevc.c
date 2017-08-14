@@ -187,7 +187,7 @@ void ff_rtp_send_h264_hevc(AVFormatContext *s1, const uint8_t *buf1, int size)
     if (s->nal_length_size)
         r = ff_avc_mp4_find_startcode(buf1, end, s->nal_length_size) ? buf1 : end;
     else
-        r = ff_avc_find_startcode(buf1, end);
+        r = ff_avc_find_startcode(buf1, end, 1);
     while (r < end) {
         const uint8_t *r1;
 
@@ -198,7 +198,7 @@ void ff_rtp_send_h264_hevc(AVFormatContext *s1, const uint8_t *buf1, int size)
             r += s->nal_length_size;
         } else {
             while (!*(r++));
-            r1 = ff_avc_find_startcode(r, end);
+            r1 = ff_avc_find_startcode(r, end, 1);
         }
         nal_send(s1, r, r1 - r, r1 == end);
         r = r1;

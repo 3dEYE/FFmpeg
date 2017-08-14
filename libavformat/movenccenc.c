@@ -195,6 +195,7 @@ int ff_mov_cenc_avc_parse_nal_units(MOVMuxCencContext* ctx, AVIOContext *pb,
     const uint8_t *p = buf_in;
     const uint8_t *end = p + size;
     const uint8_t *nal_start, *nal_end;
+    int is_h264;
     int ret;
 
     ret = mov_cenc_start_packet(ctx);
@@ -202,14 +203,20 @@ int ff_mov_cenc_avc_parse_nal_units(MOVMuxCencContext* ctx, AVIOContext *pb,
         return ret;
     }
 
+    if(size < 3) {
+      return 0;
+    }
+
+    is_h264 = AV_RB24(buf_in) != 0x000001;
+
     size = 0;
-    nal_start = ff_avc_find_startcode(p, end);
+    nal_start = ff_avc_find_startcode(p, end, is_h264);
     for (;;) {
         while (nal_start < end && !*(nal_start++));
         if (nal_start == end)
             break;
 
-        nal_end = ff_avc_find_startcode(nal_start, end);
+        nal_end = ff_avc_find_startcode(nal_start, end, is_h264);
 
         avio_wb32(pb, nal_end - nal_start);
         avio_w8(pb, *nal_start);
