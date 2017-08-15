@@ -63,7 +63,7 @@ static const uint8_t *ff_avc_find_startcode_internal_mpeg(const uint8_t *p, cons
 
 static const uint8_t *ff_avc_find_startcode_internal_h264(const uint8_t *p, const uint8_t *end)
 {
-    for (end -= 3; p < end; p += 4) {
+    for (end -= 3; p < end; p++) {
 	uint32_t x = *(const uint32_t*)p;
 
         if (AV_RB32(x) == 0x00000001)
