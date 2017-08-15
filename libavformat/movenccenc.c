@@ -196,6 +196,7 @@ int ff_mov_cenc_avc_parse_nal_units(MOVMuxCencContext* ctx, AVIOContext *pb,
     const uint8_t *end = p + size;
     const uint8_t *nal_start, *nal_end;
     int is_h264;
+    int nri;
     int ret;
 
     ret = mov_cenc_start_packet(ctx);
@@ -216,15 +217,19 @@ int ff_mov_cenc_avc_parse_nal_units(MOVMuxCencContext* ctx, AVIOContext *pb,
         if (nal_start == end)
             break;
 
+        nri = (*nal_start >> 5) & 3;
+
         nal_end = ff_avc_find_startcode(nal_start, end, is_h264);
 
-        avio_wb32(pb, nal_end - nal_start);
-        avio_w8(pb, *nal_start);
-        mov_cenc_write_encrypted(ctx, pb, nal_start + 1, nal_end - nal_start - 1);
+        if(nri != 0)
+        {
+          avio_wb32(pb, nal_end - nal_start);
+          avio_w8(pb, *nal_start);
+          mov_cenc_write_encrypted(ctx, pb, nal_start + 1, nal_end - nal_start - 1);
+          auxiliary_info_add_subsample(ctx, 5, nal_end - nal_start - 1);
+          size += 4 + nal_end - nal_start;
+        }
 
-        auxiliary_info_add_subsample(ctx, 5, nal_end - nal_start - 1);
-
-        size += 4 + nal_end - nal_start;
         nal_start = nal_end;
     }
 

@@ -63,14 +63,12 @@ static const uint8_t *ff_avc_find_startcode_internal_mpeg(const uint8_t *p, cons
 
 static const uint8_t *ff_avc_find_startcode_internal_h264(const uint8_t *p, const uint8_t *end)
 {
-    for (end -= 3; p < end; p++) {
-	uint32_t x = *(const uint32_t*)p;
-
-        if (AV_RB32(x) == 0x00000001)
+   for (end -= 3; p < end; p++) {
+        if (AV_RB32(p) == 0x00000001)
             return p;
-    }
+   }
 
-    return end;
+    return end + 3;
 }
 
 const uint8_t *ff_avc_find_startcode(const uint8_t *p, const uint8_t *end, int is_h264){
@@ -85,6 +83,7 @@ int ff_avc_parse_nal_units(AVIOContext *pb, const uint8_t *buf_in, int size)
     const uint8_t *end = p + size;
     const uint8_t *nal_start, *nal_end;
     int is_h264;
+    int nri;
 
     if(size < 3) {
       return 0;
@@ -99,10 +98,17 @@ int ff_avc_parse_nal_units(AVIOContext *pb, const uint8_t *buf_in, int size)
         if (nal_start == end)
             break;
 
+        nri = (*nal_start >> 5) & 3;
+
         nal_end = ff_avc_find_startcode(nal_start, end, is_h264);
-        avio_wb32(pb, nal_end - nal_start);
-        avio_write(pb, nal_start, nal_end - nal_start);
-        size += 4 + nal_end - nal_start;
+	
+	if(nri != 0)
+	{
+          avio_wb32(pb, nal_end - nal_start);
+          avio_write(pb, nal_start, nal_end - nal_start);
+          size += 4 + nal_end - nal_start;
+	}
+
         nal_start = nal_end;
     }
     return size;
