@@ -325,6 +325,7 @@ static int h264_handle_packet(AVFormatContext *ctx, PayloadContext *data,
     nal  = buf[0];
     type = nal & 0x1f;
 
+    if(type != 6) {
     /* Simplify the case (these are all the NAL types used internally by
      * the H.264 codec). */
     if (type >= 1 && type <= 23)
@@ -366,6 +367,7 @@ static int h264_handle_packet(AVFormatContext *ctx, PayloadContext *data,
         av_log(ctx, AV_LOG_ERROR, "Undefined type (%d)\n", type);
         result = AVERROR_INVALIDDATA;
         break;
+    }
     }
 
     pkt->stream_index = st->index;
