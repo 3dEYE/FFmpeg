@@ -128,7 +128,11 @@ static int config_props(AVFilterLink* link)
 {
     FPSContext   *s = link->src->priv;
 
-    link->time_base = av_inv_q(s->framerate);
+    if(!s->preserve_pts)
+     link->time_base = av_inv_q(s->framerate);
+    else
+     link->time_base = link->src->inputs[0]->time_base;
+
     link->frame_rate= s->framerate;
     link->w         = link->src->inputs[0]->w;
     link->h         = link->src->inputs[0]->h;
@@ -156,9 +160,6 @@ static int request_frame(AVFilterLink *outlink)
 		if(!s->preserve_pts)
                     buf->pts = av_rescale_q(s->first_pts, ctx->inputs[0]->time_base,
                                         outlink->time_base) + s->frames_out;
-		else
-                    buf->pts = av_rescale_q(buf->pts, ctx->inputs[0]->time_base,
-                                        outlink->time_base);
 
                 if ((ret = ff_filter_frame(outlink, buf)) < 0)
                     return ret;
@@ -304,9 +305,6 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *buf)
 	if(!s->preserve_pts)
          buf_out->pts = av_rescale_q(s->first_pts, inlink->time_base,
                                     outlink->time_base) + s->frames_out;
-	else
-         buf_out->pts = av_rescale_q(buf_out->pts, inlink->time_base,
-                                    outlink->time_base);
 
         if ((ret = ff_filter_frame(outlink, buf_out)) < 0) {
             av_frame_free(&buf);
