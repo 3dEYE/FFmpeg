@@ -56,6 +56,7 @@ typedef struct FPSContext {
 
     double start_time;      ///< pts, in seconds, of the expected first frame
 
+    int preserve_pts;
     AVRational framerate;   ///< target framerate
     int rounding;           ///< AVRounding method for timestamps
     int eof_action;         ///< action performed for last frame in FIFO
@@ -71,6 +72,7 @@ typedef struct FPSContext {
 #define V AV_OPT_FLAG_VIDEO_PARAM
 #define F AV_OPT_FLAG_FILTERING_PARAM
 static const AVOption fps_options[] = {
+    { "preserve_pts", "preserve original timestamps", OFFSET(preserve_pts),  AV_OPT_TYPE_BOOL, { .i64 = 0 }, 0,       1, ENC },	
     { "fps", "A string describing desired output framerate", OFFSET(framerate), AV_OPT_TYPE_VIDEO_RATE, { .str = "25" }, 0, INT_MAX, V|F },
     { "start_time", "Assume the first PTS should be this value.", OFFSET(start_time), AV_OPT_TYPE_DOUBLE, { .dbl = DBL_MAX}, -DBL_MAX, DBL_MAX, V|F },
     { "round", "set rounding method for timestamps", OFFSET(rounding), AV_OPT_TYPE_INT, { .i64 = AV_ROUND_NEAR_INF }, 0, 5, V|F, "round" },
@@ -150,7 +152,9 @@ static int request_frame(AVFilterLink *outlink)
 
             av_fifo_generic_read(s->fifo, &buf, sizeof(buf), NULL);
             if (av_fifo_size(s->fifo)) {
-                buf->pts = av_rescale_q(s->first_pts, ctx->inputs[0]->time_base,
+
+		if(!preserve_pts)
+                    buf->pts = av_rescale_q(s->first_pts, ctx->inputs[0]->time_base,
                                         outlink->time_base) + s->frames_out;
 
                 if ((ret = ff_filter_frame(outlink, buf)) < 0)
@@ -294,7 +298,8 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *buf)
             s->dup++;
         }
 
-        buf_out->pts = av_rescale_q(s->first_pts, inlink->time_base,
+	if(!preserve_pts)
+         buf_out->pts = av_rescale_q(s->first_pts, inlink->time_base,
                                     outlink->time_base) + s->frames_out;
 
         if ((ret = ff_filter_frame(outlink, buf_out)) < 0) {
