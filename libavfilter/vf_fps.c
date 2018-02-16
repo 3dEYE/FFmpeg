@@ -172,7 +172,7 @@ static int request_frame(AVFilterLink *outlink)
                 int eof_rounding = (s->eof_action == EOF_ACTION_PASS) ? AV_ROUND_UP : s->rounding;
                 int delta = av_rescale_q_rnd(ctx->inputs[0]->current_pts - s->first_pts,
                                              ctx->inputs[0]->time_base,
-                                             outlink->time_base, eof_rounding) - s->frames_out;
+                                             s->preserve_pts ? av_inv_q(s->framerate) : outlink->time_base, eof_rounding) - s->frames_out;
                 av_log(ctx, AV_LOG_DEBUG, "EOF frames_out:%d delta:%d\n", s->frames_out, delta);
                 /* if the delta is equal to 1, it means we just need to output
                  * the last frame. Greater than 1 means we will need duplicate
@@ -183,7 +183,7 @@ static int request_frame(AVFilterLink *outlink)
 
                         av_log(ctx, AV_LOG_DEBUG, "Duplicating frame.\n");
                         dup->pts = av_rescale_q(s->first_pts, ctx->inputs[0]->time_base,
-                                                outlink->time_base) + s->frames_out;
+                                                s->preserve_pts ? av_inv_q(s->framerate) : outlink->time_base) + s->frames_out;
 
                         if ((ret = ff_filter_frame(outlink, dup)) < 0)
                             return ret;
@@ -243,7 +243,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *buf)
                                                      inlink->time_base);
                 av_log(ctx, AV_LOG_VERBOSE, "Set first pts to (in:%"PRId64" out:%"PRId64")\n",
                        s->first_pts, av_rescale_q(first_pts, AV_TIME_BASE_Q,
-                                                  outlink->time_base));
+                                                  s->preserve_pts ? av_inv_q(s->framerate) : outlink->time_base));
             } else {
                 s->first_pts = buf->pts;
             }
@@ -263,7 +263,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *buf)
 
     /* number of output frames */
     delta = av_rescale_q_rnd(buf->pts - s->first_pts, inlink->time_base,
-                             outlink->time_base, s->rounding) - s->frames_out ;
+                             s->preserve_pts ? av_inv_q(s->framerate) : outlink->time_base, s->rounding) - s->frames_out ;
 
     if (delta < 1) {
         /* drop everything buffered except the last */
