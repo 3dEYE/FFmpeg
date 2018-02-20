@@ -31,6 +31,8 @@
 typedef struct NullContext {
     const AVClass *class;
     int frame_step;
+    int frametime_step;
+    int64_t previous_pts; 
 } FrameStepContext;
 
 #define OFFSET(x) offsetof(FrameStepContext, x)
@@ -38,6 +40,7 @@ typedef struct NullContext {
 
 static const AVOption framestep_options[] = {
     { "step", "set frame step",  OFFSET(frame_step), AV_OPT_TYPE_INT, {.i64=1}, 1, INT_MAX, FLAGS},
+    { "timestep", "set time step (ms)",  OFFSET(frametime_step), AV_OPT_TYPE_INT, {.i64=0}, 0, INT_MAX, FLAGS},
     { NULL },
 };
 
@@ -50,12 +53,15 @@ static int config_output_props(AVFilterLink *outlink)
     AVFilterLink *inlink = ctx->inputs[0];
 
     outlink->frame_rate =
+	framestep->frametime_step ? av_d2q(1000.0 / framestep->frametime_step, INT_MAX) :
         av_div_q(inlink->frame_rate, (AVRational){framestep->frame_step, 1});
 
-    av_log(ctx, AV_LOG_VERBOSE, "step:%d frame_rate:%d/%d(%f) -> frame_rate:%d/%d(%f)\n",
+    if(!framestep->frametime_step)
+       av_log(ctx, AV_LOG_VERBOSE, "step:%d frame_rate:%d/%d(%f) -> frame_rate:%d/%d(%f)\n",
            framestep->frame_step,
            inlink->frame_rate.num, inlink->frame_rate.den, av_q2d(inlink->frame_rate),
            outlink->frame_rate.num, outlink->frame_rate.den, av_q2d(outlink->frame_rate));
+
     return 0;
 }
 
@@ -63,12 +69,23 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *ref)
 {
     FrameStepContext *framestep = inlink->dst->priv;
 
-    if (!(inlink->frame_count_out % framestep->frame_step)) {
+    if (!framestep->frametime_step && !(inlink->frame_count_out % framestep->frame_step) || framestep->frametime_step && (framestep->previous_pts == AV_NOPTS_VALUE || 
+        av_rescale_q_rnd(ref->pts - framestep->previous_pts, inlink->time_base, av_d2q(1000.0 / framestep->frametime_step, INT_MAX), AV_ROUND_DOWN)) > 0) {
+	framestep->previous_pts = ref->pts;
         return ff_filter_frame(inlink->dst->outputs[0], ref);
     } else {
         av_frame_free(&ref);
         return 0;
     }
+}
+
+static av_cold int init(AVFilterContext *ctx)
+{
+    FrameStepContext *s = ctx->priv;
+
+    s->previous_pts = AV_NOPTS_VALUE;
+
+    return 0;
 }
 
 static const AVFilterPad framestep_inputs[] = {
@@ -91,7 +108,8 @@ static const AVFilterPad framestep_outputs[] = {
 
 AVFilter ff_vf_framestep = {
     .name        = "framestep",
-    .description = NULL_IF_CONFIG_SMALL("Select one frame every N frames."),
+    .description = NULL_IF_CONFIG_SMALL("Select one frame every N frames or every N time interval."),
+    .init        = init,
     .priv_size   = sizeof(FrameStepContext),
     .priv_class  = &framestep_class,
     .inputs      = framestep_inputs,
