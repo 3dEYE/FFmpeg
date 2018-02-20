@@ -70,7 +70,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *ref)
     FrameStepContext *framestep = inlink->dst->priv;
 
     if (!framestep->frametime_step && !(inlink->frame_count_out % framestep->frame_step) || framestep->frametime_step && (framestep->previous_pts == AV_NOPTS_VALUE || 
-        av_rescale_q_rnd(ref->pts - framestep->previous_pts, inlink->time_base, av_d2q(1000.0 / framestep->frametime_step, INT_MAX), AV_ROUND_DOWN)) > 0) {
+        (ref->pts - framestep->previous_pts) * av_q2d(inlink->time_base) * 1000 >= framestep->frametime_step)) {
 	framestep->previous_pts = ref->pts;
         return ff_filter_frame(inlink->dst->outputs[0], ref);
     } else {
