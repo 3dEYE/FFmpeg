@@ -33,6 +33,7 @@ typedef struct NullContext {
     int frame_step;
     int frametime_step;
     int64_t previous_pts; 
+    int keyframe_only;
 } FrameStepContext;
 
 #define OFFSET(x) offsetof(FrameStepContext, x)
@@ -41,6 +42,7 @@ typedef struct NullContext {
 static const AVOption framestep_options[] = {
     { "step", "set frame step",  OFFSET(frame_step), AV_OPT_TYPE_INT, {.i64=1}, 1, INT_MAX, FLAGS},
     { "timestep", "set time step (ms)",  OFFSET(frametime_step), AV_OPT_TYPE_INT, {.i64=0}, 0, INT_MAX, FLAGS},
+    { "keyframeonly", "process key frames only", OFFSET(keyframe_only),  AV_OPT_TYPE_BOOL, { .i64 = 0 }, 0,       1, FLAGS},
     { NULL },
 };
 
@@ -68,6 +70,11 @@ static int config_output_props(AVFilterLink *outlink)
 static int filter_frame(AVFilterLink *inlink, AVFrame *ref)
 {
     FrameStepContext *framestep = inlink->dst->priv;
+
+    if(framestep->keyframe_only && !ref->key_frame) {
+        av_frame_free(&ref);
+        return 0;
+    }
 
     if (!framestep->frametime_step && !(inlink->frame_count_out % framestep->frame_step) || framestep->frametime_step && (framestep->previous_pts == AV_NOPTS_VALUE || 
         (ref->pts - framestep->previous_pts) * av_q2d(inlink->time_base) * 1000 >= framestep->frametime_step)) {
