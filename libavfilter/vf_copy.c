@@ -46,7 +46,6 @@ static int query_formats(AVFilterContext *ctx)
 
 static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 {
-    AVFilterContext *ctx = inlink->dst;
     AVFilterLink *outlink = inlink->dst->outputs[0];
     AVFrame *out = ff_get_video_buffer(outlink, in->width, in->height);
 
@@ -54,14 +53,6 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         av_frame_free(&in);
         return AVERROR(ENOMEM);
     }
-
-    if(inlink->frame_count_out == 0) {
-         av_log(ctx, AV_LOG_INFO,
-           "first_frame pts:%7s pts_time:%-7s",
-           inlink->frame_count_out,
-           av_ts2str(in->pts), av_ts2timestr(in->pts, &inlink->time_base));
-    }
-
     av_frame_copy_props(out, in);
     av_frame_copy(out, in);
     av_frame_free(&in);
