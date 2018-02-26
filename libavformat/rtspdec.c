@@ -24,6 +24,7 @@
 #include "libavutil/mathematics.h"
 #include "libavutil/random_seed.h"
 #include "libavutil/time.h"
+#include "libavutil/timestamp.h"
 #include "avformat.h"
 
 #include "internal.h"
@@ -903,6 +904,20 @@ retry:
         }
         return ret;
     }
+
+    if(!rt->firstpacket_info_shown) {
+	
+	AVStream* stream = s->streams[pkt->stream_index];
+
+	if(stream->codec->codec_type == AVMEDIA_TYPE_VIDEO) {
+	  rt->firstpacket_info_shown = 1;
+
+	  av_log(s, AV_LOG_INFO,
+	     "first_video_frame pts:%7s pts_time:%-7s\n",
+ 	      av_ts2str(pkt->pts), av_ts2timestr(pkt->pts, &stream->time_base));
+        }
+    }
+
     rt->packets++;
 
     if (!(rt->rtsp_flags & RTSP_FLAG_LISTEN)) {
