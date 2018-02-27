@@ -25,6 +25,7 @@
 #include "libavutil/random_seed.h"
 #include "libavutil/time.h"
 #include "libavutil/timestamp.h"
+#include <sys/time.h>
 #include "avformat.h"
 
 #include "internal.h"
@@ -818,6 +819,8 @@ static int rtsp_read_packet(AVFormatContext *s, AVPacket *pkt)
     int ret;
     RTSPMessageHeader reply1, *reply = &reply1;
     char cmd[1024];
+    char buffer[512];
+    struct timeval now;
 
 retry:
     if (rt->server_type == RTSP_SERVER_REAL) {
@@ -912,9 +915,14 @@ retry:
 	if(stream->codec->codec_type == AVMEDIA_TYPE_VIDEO) {
 	  rt->firstpacket_info_shown = 1;
 
-	  av_log(s, AV_LOG_INFO,
-	     "first_video_frame pts:%7s pts_time:%-7s\n",
- 	      av_ts2str(pkt->pts), av_ts2timestr(pkt->pts, &stream->time_base));
+          gettimeofday(&now, NULL);
+
+          now.tv_sec += av_q2d(stream->time_base) * pkt->pts;
+
+          strftime(buffer, sizeof(buffer), "%Y-%m-%dT%H:%M:%S", gmtime(&now.tv_sec));
+
+          av_log(s, AV_LOG_INFO,
+             "first_video_frame timestamp:\"%s.%ldZ\"\n", buffer, now.tv_usec / 1000);
         }
     }
 
