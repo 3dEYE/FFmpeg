@@ -926,6 +926,9 @@ retry:
         }
     }
 
+    if(!s->firstframe_wallclocktime)
+        s->firstframe_wallclocktime = av_gettime();
+
     rt->packets++;
 
     if (!(rt->rtsp_flags & RTSP_FLAG_LISTEN)) {
