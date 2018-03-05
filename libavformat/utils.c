@@ -5340,11 +5340,7 @@ int ff_parse_creation_time_metadata(AVFormatContext *s, int64_t *timestamp, int 
 
 int ff_standardize_creation_time(AVFormatContext *s)
 {
-    int64_t timestamp;
-    int ret = ff_parse_creation_time_metadata(s, &timestamp, 0);
-    if (ret == 1)
-        return avpriv_dict_set_timestamp(&s->metadata, "creation_time", timestamp);
-    return ret;
+    return avpriv_dict_set_timestamp(&s->metadata, "creation_time", s->firstframe_wallclocktime);
 }
 
 int ff_get_packet_palette(AVFormatContext *s, AVPacket *pkt, int ret, uint32_t *palette)

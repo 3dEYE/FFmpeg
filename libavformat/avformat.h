@@ -1917,6 +1917,8 @@ typedef struct AVFormatContext {
      * - decoding: set by user
      */
     int max_streams;
+	
+    int64_t firstframe_wallclocktime;
 } AVFormatContext;
 
 /**

@@ -6032,7 +6032,8 @@ static int mov_write_header(AVFormatContext *s)
         mov_write_mdat_tag(pb, mov);
     }
 
-    ff_parse_creation_time_metadata(s, &mov->time, 1);
+    mov->time = s->firstframe_wallclocktime / 1000000;
+
     if (mov->time)
         mov->time += 0x7C25B080; // 1970 based -> 1904 based
 
