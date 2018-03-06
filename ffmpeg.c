@@ -1994,9 +1994,6 @@ static void do_streamcopy(InputStream *ist, OutputStream *ost, const AVPacket *p
     AVPicture pict;
     AVPacket opkt;
 
-    if(!of->ctx->firstframe_wallclocktime)
-        of->ctx->firstframe_wallclocktime = av_gettime();
-
     av_init_packet(&opkt);
 
     if ((!ost->frame_number && !(pkt->flags & AV_PKT_FLAG_KEY)) &&

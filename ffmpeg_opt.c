@@ -40,6 +40,7 @@
 #include "libavutil/parseutils.h"
 #include "libavutil/pixdesc.h"
 #include "libavutil/pixfmt.h"
+#include "libavutil/time.h"
 
 #define DEFAULT_PASS_LOGFILENAME_PREFIX "ffmpeg2pass"
 
@@ -2061,6 +2062,15 @@ static int open_output_file(OptionsContext *o, const char *filename)
         print_error(filename, err);
         exit_program(1);
     }
+
+    for (i = 0; i < nb_input_files; i++)
+       if (input_files[i]->ctx->firstframe_wallclocktime) {
+          oc->firstframe_wallclocktime = input_files[i]->ctx->firstframe_wallclocktime;
+          break;
+    }
+
+    if(!oc->firstframe_wallclocktime)
+     oc->firstframe_wallclocktime = av_gettime();
 
     of->ctx = oc;
     if (o->recording_time != INT64_MAX)
