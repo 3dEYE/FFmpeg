@@ -2455,6 +2455,9 @@ static int decode_video(InputStream *ist, AVPacket *pkt, int *got_output, int64_
             ist->next_pts = ist->pts = ts;
     }
 
+    if(eof)
+    	decoded_frame->pts = av_rescale_q(input_files[ist->file_index]->start_time, AV_TIME_BASE_Q, ist->st->time_base);
+
     if (debug_ts) {
         av_log(NULL, AV_LOG_INFO, "decoder -> ist_index:%d type:video "
                "frame_pts:%s frame_pts_time:%s best_effort_ts:%"PRId64" best_effort_ts_time:%s keyframe:%d frame_type:%d time_base:%d/%d\n",
