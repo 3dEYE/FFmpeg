@@ -129,7 +129,7 @@ static int trim_filter_frame(AVFilterLink *inlink, AVFrame *frame)
 
     /* drop everything if EOF has already been returned */
     if (s->eof) {
-        av_frame_free(&frame);
+        av_frame_unref(&frame);
         return 0;
     }
 
@@ -172,7 +172,7 @@ static int trim_filter_frame(AVFilterLink *inlink, AVFrame *frame)
 
 drop:
     s->nb_frames++;
-    av_frame_free(&frame);
+    av_frame_unref(&frame);
     return 0;
 }
 

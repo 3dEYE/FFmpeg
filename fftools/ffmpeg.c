@@ -588,6 +588,7 @@ static void ffmpeg_cleanup(int ret)
     for (i = 0; i < nb_input_streams; i++) {
         InputStream *ist = input_streams[i];
 
+        av_frame_free(&ist->prev_decoded_frame);
         av_frame_free(&ist->decoded_frame);
         av_frame_free(&ist->filter_frame);
         av_dict_free(&ist->decoder_opts);
@@ -2420,7 +2421,18 @@ static int decode_video(InputStream *ist, AVPacket *pkt, int *got_output, int64_
     }
 
     if (!*got_output || ret < 0)
-        return ret;
+    {
+      if(eof && ist->prev_decoded_frame != NULL)
+      {
+        ist->prev_decoded_frame->pts = INT64_MAX;
+        err = send_frame_to_filters(ist, ist->prev_decoded_frame);
+        av_frame_unref(ist->prev_decoded_frame);
+        ist->prev_decoded_frame = NULL;
+        return err;
+      }
+
+      return ret;
+    }
 
     if(ist->top_field_first>=0)
         decoded_frame->top_field_first = ist->top_field_first;
@@ -2456,7 +2468,19 @@ static int decode_video(InputStream *ist, AVPacket *pkt, int *got_output, int64_
     }
 
     if(eof)
-    	decoded_frame->pts = av_rescale_q(input_files[ist->file_index]->start_time, AV_TIME_BASE_Q, ist->st->time_base);
+    	decoded_frame->pts = INT64_MAX;
+    else
+    {
+      if (!ist->prev_decoded_frame && !(ist->prev_decoded_frame = av_frame_alloc()))
+         return AVERROR(ENOMEM);
+
+      av_frame_unref(ist->prev_decoded_frame);
+
+      err = av_frame_ref(ist->prev_decoded_frame, decoded_frame);
+
+      if(err)
+	return err;
+    }
 
     if (debug_ts) {
         av_log(NULL, AV_LOG_INFO, "decoder -> ist_index:%d type:video "

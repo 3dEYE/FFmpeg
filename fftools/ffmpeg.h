@@ -305,6 +305,7 @@ typedef struct InputStream {
     AVCodec *dec;
     AVFrame *decoded_frame;
     AVFrame *filter_frame; /* a ref of decoded_frame, to be sent to filters */
+    AVFrame *prev_decoded_frame;
 
     int64_t       start;     /* time when read started */
     /* predicted dts of the next packet read for this stream or (when there are
