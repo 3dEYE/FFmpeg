@@ -2424,10 +2424,9 @@ static int decode_video(InputStream *ist, AVPacket *pkt, int *got_output, int64_
     {
       if(eof && ist->prev_decoded_frame != NULL)
       {
-        ist->prev_decoded_frame->pts = INT64_MAX;
+        ist->prev_decoded_frame->pts = ist->st->start_time;
         err = send_frame_to_filters(ist, ist->prev_decoded_frame);
-        av_frame_unref(ist->prev_decoded_frame);
-        ist->prev_decoded_frame = NULL;
+	av_frame_free(&ist->prev_decoded_frame);
         return err;
       }
 
@@ -2468,7 +2467,7 @@ static int decode_video(InputStream *ist, AVPacket *pkt, int *got_output, int64_
     }
 
     if(eof)
-    	decoded_frame->pts = INT64_MAX;
+    	decoded_frame->pts = ist->st->start_time;
     else
     {
       if (!ist->prev_decoded_frame && !(ist->prev_decoded_frame = av_frame_alloc()))
