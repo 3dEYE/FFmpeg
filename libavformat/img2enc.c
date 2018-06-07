@@ -45,6 +45,7 @@ typedef struct VideoMuxData {
     int frame_pts;
     const char *muxer;
     int use_rename;
+    int64_t creation_time;
 } VideoMuxData;
 
 static int write_header(AVFormatContext *s)
@@ -87,6 +88,8 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt)
     const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(par->format);
     int i;
     int nb_renames = 0;
+    AVRational *time_base;
+    int64_t frame_time_ms;
 
     if (!img->is_pipe) {
         if (img->update) {
@@ -131,6 +134,16 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt)
     } else {
         pb[0] = s->pb;
     }
+
+    if(!img->creation_time && ff_parse_creation_time_metadata(s, &img->creation_time, 0) == 0)
+        img->creation_time /= 1000;
+   
+    time_base = &s->streams[pkt->stream_index]->time_base;
+    frame_time_ms = img->creation_time + pkt->pts * 1000 * time_base->num / time_base->den;
+    avio_wl64(pb[0], frame_time_ms);
+    avio_wl32(pb[0], par->width);
+    avio_wl32(pb[0], par->height);
+    avio_wl32(pb[0], pkt->size);
 
     if (img->split_planes) {
         int ysize = par->width * par->height;
