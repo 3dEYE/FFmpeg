@@ -24,6 +24,7 @@
 #include "cmdutils.h"
 
 #include "libavformat/avformat.h"
+#include "libavformat/internal.h"
 
 #include "libavcodec/avcodec.h"
 
@@ -2097,6 +2098,9 @@ static int open_output_file(OptionsContext *o, const char *filename)
         print_error(filename, err);
         exit_program(1);
     }
+
+    if(ff_parse_creation_time_metadata(input_files[0]->ctx, &oc->timestamp_base, 0))
+      oc->timestamp_base = oc->timestamp_base / 1000 + input_files[0]->ctx->start_time * 1000 / AV_TIME_BASE;
 
     of->ctx = oc;
     if (o->recording_time != INT64_MAX)
