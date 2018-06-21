@@ -973,6 +973,8 @@ static int seg_write_trailer(struct AVFormatContext *s)
     SegmentContext *seg = s->priv_data;
     AVFormatContext *oc = seg->avf;
     SegmentListEntry *cur, *next;
+    int64_t cur_time;
+    char buffer[AV_TS_MAX_STRING_SIZE];
     int ret = 0;
 
     if (!oc)
