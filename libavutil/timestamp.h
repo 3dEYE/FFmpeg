@@ -69,6 +69,25 @@ static inline char *av_ts_make_time_string(char *buf, int64_t ts, AVRational *tb
     return buf;
 }
 
+static inline char *av_ts_make_time_iso8601_string(char *buf, int64_t ts)
+{
+    char tmp[AV_TS_MAX_STRING_SIZE];
+    time_t ts_secs;
+    long int ts_millisecs;    
+
+    ts_secs = ts / 1000000;
+    ts_millisecs = lrint((ts % 1000000) / 1000.0);
+
+    if (ts_millisecs == 1000) {
+      ts_millisecs = 0;
+      ++ts_secs;
+    }
+
+    strftime(tmp, AV_TS_MAX_STRING_SIZE, "%Y-%m-%dT%H:%M:%S", gmtime(&ts_secs));
+    snprintf(buf, AV_TS_MAX_STRING_SIZE, "%s.%ldZ", tmp, ts_millisecs);
+    return buf;
+}
+
 /**
  * Convenience macro, the return value should be used only directly in
  * function arguments but never stand-alone.

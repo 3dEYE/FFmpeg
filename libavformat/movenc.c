@@ -6034,6 +6034,9 @@ static int mov_write_header(AVFormatContext *s)
 
     mov->time = s->firstframe_wallclocktime / 1000000;
 
+    if(s->firstframe_wallclocktime % 1000000 > 500000)
+        ++mov->time;
+
     if (mov->time)
         mov->time += 0x7C25B080; // 1970 based -> 1904 based
 

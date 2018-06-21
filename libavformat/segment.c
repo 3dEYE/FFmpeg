@@ -226,7 +226,7 @@ static int set_segment_filename(AVFormatContext *s)
     return 0;
 }
 
-static int segment_start(AVFormatContext *s, int write_header)
+static int segment_start(AVFormatContext *s, int write_header, int64_t cur_time)
 {
     SegmentContext *seg = s->priv_data;
     AVFormatContext *oc = seg->avf;
@@ -256,6 +256,8 @@ static int segment_start(AVFormatContext *s, int write_header)
 
     if (oc->oformat->priv_class && oc->priv_data)
         av_opt_set(oc->priv_data, "mpegts_flags", "+resend_headers", 0);
+
+    oc->firstframe_wallclocktime = cur_time;
 
     if (write_header) {
         AVDictionary *options = NULL;
@@ -801,6 +803,12 @@ static int seg_write_header(AVFormatContext *s)
     SegmentContext *seg = s->priv_data;
     AVFormatContext *oc = seg->avf;
     int ret, i;
+    char buffer[AV_TS_MAX_STRING_SIZE];
+
+    av_ts_make_time_iso8601_string(buffer, s->firstframe_wallclocktime);  
+    av_log(s, AV_LOG_INFO, "segment_start_time:\"%s\"\n", buffer);
+
+    oc->firstframe_wallclocktime = s->firstframe_wallclocktime;
 
     if (!seg->header_written) {
         for (i = 0; i < s->nb_streams; i++) {
@@ -851,6 +859,8 @@ static int seg_write_packet(AVFormatContext *s, AVPacket *pkt)
     struct tm ti;
     int64_t usecs;
     int64_t wrapped_val;
+    char buffer[AV_TS_MAX_STRING_SIZE];
+    int64_t cur_time;
 
     if (!seg->avf || !seg->avf->pb)
         return AVERROR(EINVAL);
@@ -894,10 +904,16 @@ calc_times:
         if (seg->cur_entry.last_duration == 0)
             seg->cur_entry.end_time = (double)pkt->pts * av_q2d(st->time_base);
 
+	cur_time = s->firstframe_wallclocktime + pkt->pts * st->time_base.num / st->time_base.den * 1000000;
+        av_ts_make_time_iso8601_string(buffer, cur_time);  
+
+        av_log(s, AV_LOG_INFO, "segment_end_time:\"%s\"\n", buffer);
+        av_log(s, AV_LOG_INFO, "segment_start_time:\"%s\"\n", buffer);
+
         if ((ret = segment_end(s, seg->individual_header_trailer, 0)) < 0)
             goto fail;
 
-        if ((ret = segment_start(s, seg->individual_header_trailer)) < 0)
+        if ((ret = segment_start(s, seg->individual_header_trailer, cur_time)) < 0)
             goto fail;
 
         seg->cut_pending = 0;

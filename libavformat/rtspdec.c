@@ -819,8 +819,7 @@ static int rtsp_read_packet(AVFormatContext *s, AVPacket *pkt)
     int ret;
     RTSPMessageHeader reply1, *reply = &reply1;
     char cmd[1024];
-    char buffer[512];
-    struct timeval now;
+    char buffer[AV_TS_MAX_STRING_SIZE];
 
 retry:
     if (rt->server_type == RTSP_SERVER_REAL) {
@@ -908,6 +907,9 @@ retry:
         return ret;
     }
 
+    if(!s->firstframe_wallclocktime)
+        s->firstframe_wallclocktime = av_gettime();
+
     if(!rt->firstpacket_info_shown) {
 	
 	AVStream* stream = s->streams[pkt->stream_index];
@@ -915,19 +917,10 @@ retry:
 	if(stream->codec->codec_type == AVMEDIA_TYPE_VIDEO) {
 	  rt->firstpacket_info_shown = 1;
 
-          gettimeofday(&now, NULL);
-
-          now.tv_sec += av_q2d(stream->time_base) * pkt->pts;
-
-          strftime(buffer, sizeof(buffer), "%Y-%m-%dT%H:%M:%S", gmtime(&now.tv_sec));
-
-          av_log(s, AV_LOG_INFO,
-             "first_video_frame timestamp:\"%s.%ldZ\"\n", buffer, now.tv_usec / 1000);
+          av_log(s, AV_LOG_INFO, "first_video_frame timestamp:\"%s\"\n", 
+                 av_ts_make_time_iso8601_string(buffer, s->firstframe_wallclocktime));
         }
     }
-
-    if(!s->firstframe_wallclocktime)
-        s->firstframe_wallclocktime = av_gettime();
 
     rt->packets++;
 
