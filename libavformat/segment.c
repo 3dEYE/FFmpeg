@@ -978,6 +978,12 @@ static int seg_write_trailer(struct AVFormatContext *s)
     if (!oc)
         goto fail;
 
+    if(seg->cur_entry.end_time > 0) {
+      cur_time = s->firstframe_wallclocktime + (int64_t)(seg->cur_entry.end_time * 1000000);
+      av_ts_make_time_iso8601_string(buffer, cur_time);  
+      av_log(s, AV_LOG_INFO, "segment_end_time:\"%s\"\n", buffer);
+    }
+
     if (!seg->write_header_trailer) {
         if ((ret = segment_end(s, 0, 1)) < 0)
             goto fail;
