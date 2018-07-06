@@ -429,7 +429,7 @@ OBJS-$(CONFIG_RTP_MUXER)                 += rtp.o         \
                                             avc.o hevc.o
 OBJS-$(CONFIG_RTSP_DEMUXER)              += rtsp.o rtspdec.o httpauth.o \
                                             urldecode.o
-OBJS-$(CONFIG_RTSP_MUXER)                += rtsp.o rtspenc.o httpauth.o \
+OBJS-$(CONFIG_RTSP_MUXER)                += rtsp.o rtspenc.o httpauth.o janusenc.o \
                                             urldecode.o
 OBJS-$(CONFIG_SAMI_DEMUXER)              += samidec.o subtitles.o
 OBJS-$(CONFIG_SAP_DEMUXER)               += sapdec.o

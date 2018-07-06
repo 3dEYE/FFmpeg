@@ -266,6 +266,7 @@ static void register_all(void)
     REGISTER_MUXDEMUX(RTP,              rtp);
     REGISTER_MUXER   (RTP_MPEGTS,       rtp_mpegts);
     REGISTER_MUXDEMUX(RTSP,             rtsp);
+    REGISTER_MUXER   (RTSP,             janus);
     REGISTER_DEMUXER (SAMI,             sami);
     REGISTER_MUXDEMUX(SAP,              sap);
     REGISTER_DEMUXER (SBG,              sbg);
