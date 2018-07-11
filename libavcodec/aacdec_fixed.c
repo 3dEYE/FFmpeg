@@ -183,7 +183,7 @@ static void subband_scale(int *dst, int *src, int scale, int offset, int len)
         }
     } else if (s > -32) {
         s = s + 32;
-        round = 1 << (s-1);
+        round = 1U << (s-1);
         for (i=0; i<len; i++) {
             out = (int)((int64_t)((int64_t)src[i] * c + round) >> s);
             dst[i] = out * (unsigned)ssign;
@@ -305,8 +305,12 @@ static av_always_inline void predict(PredictorState *ps, int *coef,
     if (output_enable) {
         int shift = 28 - pv.exp;
 
-        if (shift < 31)
-            *coef += (pv.mant + (1 << (shift - 1))) >> shift;
+        if (shift < 31) {
+            if (shift > 0) {
+                *coef += (unsigned)((pv.mant + (1 << (shift - 1))) >> shift);
+            } else
+                *coef += (unsigned)pv.mant << -shift;
+        }
     }
 
     e0 = av_int2sf(*coef, 2);
@@ -381,7 +385,7 @@ static void apply_dependent_coupling_fixed(AACContext *ac,
                         for (k = offsets[i]; k < offsets[i + 1]; k++) {
                             tmp = (int)(((int64_t)src[group * 128 + k] * c + \
                                        (int64_t)0x1000000000) >> 37);
-                            dest[group * 128 + k] += (tmp + round) >> shift;
+                            dest[group * 128 + k] += (tmp + (int64_t)round) >> shift;
                         }
                     }
                 }
@@ -390,7 +394,7 @@ static void apply_dependent_coupling_fixed(AACContext *ac,
                         for (k = offsets[i]; k < offsets[i + 1]; k++) {
                             tmp = (int)(((int64_t)src[group * 128 + k] * c + \
                                         (int64_t)0x1000000000) >> 37);
-                            dest[group * 128 + k] += tmp * (1 << shift);
+                            dest[group * 128 + k] += tmp * (1U << shift);
                         }
                     }
                 }
@@ -413,12 +417,14 @@ static void apply_independent_coupling_fixed(AACContext *ac,
     int i, c, shift, round, tmp;
     const int gain = cce->coup.gain[index][0];
     const int *src = cce->ch[0].ret;
-    int *dest = target->ret;
+    unsigned int *dest = target->ret;
     const int len = 1024 << (ac->oc[1].m4ac.sbr == 1);
 
     c = cce_scale_fixed[gain & 7];
     shift = (gain-1024) >> 3;
-    if (shift < 0) {
+    if (shift < -31) {
+        return;
+    } else if (shift < 0) {
         shift = -shift;
         round = 1 << (shift - 1);
 
@@ -430,7 +436,7 @@ static void apply_independent_coupling_fixed(AACContext *ac,
     else {
       for (i = 0; i < len; i++) {
           tmp = (int)(((int64_t)src[i] * c + (int64_t)0x1000000000) >> 37);
-          dest[i] += tmp * (1 << shift);
+          dest[i] += tmp * (1U << shift);
       }
     }
 }

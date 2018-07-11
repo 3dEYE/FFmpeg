@@ -30,12 +30,13 @@
 #include "avcodec.h"
 
 #define MAX_REGISTERED_FRAMES 64
+#define RC_MODE_DEPRECATED 0x800000
+#define RCD(rc_mode) ((rc_mode) | RC_MODE_DEPRECATED)
 
 typedef struct NvencSurface
 {
     NV_ENC_INPUT_PTR input_surface;
     AVFrame *in_ref;
-    NV_ENC_MAP_INPUT_RESOURCE in_map;
     int reg_idx;
     int width;
     int height;
@@ -44,7 +45,6 @@ typedef struct NvencSurface
     NV_ENC_OUTPUT_PTR output_surface;
     NV_ENC_BUFFER_FORMAT format;
     int size;
-    int lockCount;
 } NvencSurface;
 
 typedef struct NvencDynLoadFunctions
@@ -110,14 +110,18 @@ typedef struct NvencContext
     int nb_surfaces;
     NvencSurface *surfaces;
 
+    AVFifoBuffer *unused_surface_queue;
     AVFifoBuffer *output_surface_queue;
     AVFifoBuffer *output_surface_ready_queue;
     AVFifoBuffer *timestamp_list;
+
+    int encoder_flushing;
 
     struct {
         CUdeviceptr ptr;
         NV_ENC_REGISTERED_PTR regptr;
         int mapped;
+        NV_ENC_MAP_INPUT_RESOURCE in_map;
     } registered_frames[MAX_REGISTERED_FRAMES];
     int nb_registered_frames;
 
@@ -152,18 +156,24 @@ typedef struct NvencContext
     int nonref_p;
     int strict_gop;
     int aq_strength;
-    int quality;
+    float quality;
     int aud;
     int bluray_compat;
     int init_qp_p;
     int init_qp_b;
     int init_qp_i;
     int cqp;
+    int weighted_pred;
+    int coder;
 } NvencContext;
 
 int ff_nvenc_encode_init(AVCodecContext *avctx);
 
 int ff_nvenc_encode_close(AVCodecContext *avctx);
+
+int ff_nvenc_send_frame(AVCodecContext *avctx, const AVFrame *frame);
+
+int ff_nvenc_receive_packet(AVCodecContext *avctx, AVPacket *pkt);
 
 int ff_nvenc_encode_frame(AVCodecContext *avctx, AVPacket *pkt,
                           const AVFrame *frame, int *got_packet);

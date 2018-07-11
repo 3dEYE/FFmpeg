@@ -41,7 +41,7 @@ static av_cold int dfa_decode_init(AVCodecContext *avctx)
 
     avctx->pix_fmt = AV_PIX_FMT_PAL8;
 
-    if (!avctx->width || !avctx->height)
+    if (!avctx->width || !avctx->height || FFMAX(avctx->width, avctx->height) >= (1<<16))
         return AVERROR_INVALIDDATA;
 
     av_assert0(av_image_check_size(avctx->width, avctx->height, 0, avctx) >= 0);
@@ -330,7 +330,7 @@ static const chunk_decoder decoder[8] = {
     decode_tdlt, decode_dsw1, decode_blck, decode_dds1,
 };
 
-static const char* chunk_name[8] = {
+static const char * const chunk_name[8] = {
     "COPY", "TSW1", "BDLT", "WDLT", "TDLT", "DSW1", "BLCK", "DDS1"
 };
 
