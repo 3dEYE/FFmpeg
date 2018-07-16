@@ -44,17 +44,22 @@
 #define MAX_EXTRADATA_SIZE ((INT_MAX - 10) / 2)
 
 typedef struct JanusState {
-  AVFormatContext *rtpctxes[2];
+  AVFormatContext *video_rtpctx;
+  AVFormatContext *audio_rtpctx;
   int video_stream_index;
   int audio_stream_index;
   char *mountpoint_id;
   char *mountpoint_pin;
+  uint8_t *extradata;
+  uint8_t *extradata_copy;
+  int extradata_size;
   pthread_t janus_thread;
   volatile int janus_thread_terminated;
   AVIOInterruptCB thread_terminate_cb;
   volatile int video_port;
   volatile int audio_port;
   volatile int reconnect;
+  int wait_i_frame;
 } JanusState;
 
 #define OFFSET(x) offsetof(JanusState, x)
@@ -140,12 +145,12 @@ static char *read_json_value(const char *str, const char *field, char *value_buf
 static int open_http_context(AVFormatContext *s, URLContext **h, AVIOInterruptCB *interrupt_callback)
 {
     char proto[32];
-    char hostname[256];
+    char hostname[512];
     int port;
     int ret;
     URLContext *urlctx;
-    char buf[1024];
-    char headers[1024];
+    char buf[2048];
+    char headers[512];
     void *priv_data;
     
     av_url_split(proto, sizeof(proto), NULL, 0, hostname, sizeof(hostname), &port, NULL, 0, s->filename);
@@ -186,8 +191,8 @@ static int open_http_context(AVFormatContext *s, URLContext **h, AVIOInterruptCB
 static int send_http_json_request(AVFormatContext *s, URLContext *h, const char *path, const char *json_request, char *json_response, int json_response_max_size)
 {
    char proto[32];
-   char hostname[256];
-   char buf[1024];
+   char hostname[512];
+   char buf[2048];
    int port;
    int ret;
    char *status;
@@ -262,25 +267,16 @@ static void fill_rtp_map_info(char *buff, int size, int payload_type, AVStream *
             }
             break;
         case AV_CODEC_ID_PCM_S16BE:
-            if (payload_type >= RTP_PT_PRIVATE)
-                snprintf(buff, size, "L16/%d/%d",
-                                         p->sample_rate, p->channels);
-            else
-               *buff = '\0';
+            snprintf(buff, size, "L16/%d/%d",
+                                    p->sample_rate, p->channels);
             break;
         case AV_CODEC_ID_PCM_MULAW:
-            if (payload_type >= RTP_PT_PRIVATE)
-                snprintf(buff, size, "PCMU/%d/%d",
-                                         p->sample_rate, p->channels);
-            else
-               *buff = '\0';
+             snprintf(buff, size, "PCMU/%d/%d",
+                                    p->sample_rate, p->channels);
             break;
         case AV_CODEC_ID_PCM_ALAW:
-            if (payload_type >= RTP_PT_PRIVATE)
-                snprintf(buff, size, "PCMA/%d/%d",
-                                         p->sample_rate, p->channels);
-            else
-                *buff = '\0';
+             snprintf(buff, size, "PCMA/%d/%d",
+                                    p->sample_rate, p->channels);
             break;
         case AV_CODEC_ID_AMR_NB:
             snprintf(buff, size, "AMR/%d/%d",
@@ -300,25 +296,16 @@ static void fill_rtp_map_info(char *buff, int size, int payload_type, AVStream *
         }
 
         case AV_CODEC_ID_MJPEG:
-            if (payload_type >= RTP_PT_PRIVATE)
-                snprintf(buff, size, "JPEG/90000");
-            else
-                *buff = '\0';
+            snprintf(buff, size, "JPEG/90000");
             break;
 
         case AV_CODEC_ID_ADPCM_G722:
-            if (payload_type >= RTP_PT_PRIVATE)
-                snprintf(buff, size, "G722/%d/%d", 8000, p->channels);
-            else
-                *buff = '\0';
+            snprintf(buff, size, "G722/%d/%d", 8000, p->channels);
             break;
         case AV_CODEC_ID_ADPCM_G726: {
-            if (payload_type >= RTP_PT_PRIVATE)
-                snprintf(buff, size, "G726-%d/%d",
-                                         p->bits_per_coded_sample*8,
-                                         p->sample_rate);
-            else
-                *buff = '\0';
+            snprintf(buff, size, "G726-%d/%d",
+                                   p->bits_per_coded_sample*8,
+                                   p->sample_rate);
             break;
         }
         case AV_CODEC_ID_ILBC:
@@ -349,7 +336,6 @@ static char *extradata2psets(AVFormatContext *s, AVCodecParameters *par)
     char *psets, *p;
     const uint8_t *r;
     static const char pset_string[] = "; sprop-parameter-sets=";
-    static const char profile_string[] = "; profile-level-id=";
     uint8_t *extradata = par->extradata;
     int extradata_size = par->extradata_size;
     uint8_t *tmpbuf = NULL;
@@ -406,12 +392,6 @@ static char *extradata2psets(AVFormatContext *s, AVCodecParameters *par)
         }
         p += strlen(p);
         r = r1;
-    }
-    if (sps && sps_end - sps >= 4) {
-        memcpy(p, profile_string, strlen(profile_string));
-        p += strlen(p);
-        ff_data_to_hex(p, sps + 1, 3, 0);
-        p[6] = '\0';
     }
 
     av_free(tmpbuf);
@@ -686,6 +666,7 @@ static void fill_rtp_format_info(char *buff, int size, int payload_type, AVStrea
             }
             snprintf(buff, size, "packetization-mode=%d%s",
                                      mode, config ? config : "");
+
             break;
         }
         case AV_CODEC_ID_H261:
@@ -836,12 +817,13 @@ static void fill_rtp_format_info(char *buff, int size, int payload_type, AVStrea
     av_free(config);
 }
 
-static int create_janus_mountpoint(AVFormatContext *s, const char *mountpoint_id, const char *mountpoint_pin, int *video_port, int *audio_port)
+static int create_janus_mountpoint(AVFormatContext *s, const char *mountpoint_id, const char *mountpoint_pin, int destroy_previous_mountpoint, int *video_port, int *audio_port)
 {     
    const char *create_session_request = "{\"janus\":\"create\",\"transaction\":\"sBJNyUhH6Vc6\"}";
    const char *attach_plugin_request = "{\"janus\":\"attach\",\"transaction\":\"xWJquAhH6dc2\",\"plugin\":\"janus.plugin.streaming\"}";
    const char *create_mountpoint_request_template = "{\"janus\":\"message\",\"transaction\":\"hRJNyehH2jc4\",\"body\":{\"request\":\"create\",\"secret\":\"3DEYE\",%s\"type\":\"rtp\",\"id\":%s,\"name\":\"%s\",\"video\":true,\"videortpmap\":\"%s\",\"videopt\":%d,\"videofmtp\":\"%s\",\"videoport\":0,\"audio\":%s,\"audiortpmap\":\"%s\",\"audiopt\":%d,\"audiofmtp\":\"%s\",\"audioport\":0}}";
    const char *info_mountpoint_template = "{\"janus\":\"message\",\"transaction\":\"tRJRyeaV7fc0\",\"body\":{\"request\":\"info\",\"id\":%s,\"secret\":\"3DEYE\"}}";
+   const char *destroy_mountpoint_request_template = "{\"janus\":\"message\",\"transaction\":\"cxJRyhtB1lo0\",\"body\":{\"request\":\"destroy\",\"id\":%s,\"secret\":\"3DEYE\"}}";
    char janus_response[1024];
    char session_buffer[256];
    char plugin_id_buffer[256];
@@ -893,15 +875,29 @@ static int create_janus_mountpoint(AVFormatContext *s, const char *mountpoint_id
 
    snprintf(path_buffer, sizeof(path_buffer), "/janus/%s/%s", session_id, plugin_id);
 
+   if(destroy_previous_mountpoint)
+   {
+      snprintf(buffer, sizeof(buffer), destroy_mountpoint_request_template, mountpoint_id);
+
+      if((ret = send_http_json_request(s, h, path_buffer, buffer, janus_response, sizeof(janus_response))) < 0)
+         goto fail;
+   }
+
    video_payload_type = ff_rtp_get_payload_type(s, s->streams[js->video_stream_index]->codecpar, js->video_stream_index);
    fill_rtp_map_info(video_rtp_map_buffer, sizeof(video_rtp_map_buffer), video_payload_type, s->streams[js->video_stream_index], s);
    fill_rtp_format_info(video_rtp_format_buffer, sizeof(video_rtp_format_buffer), video_payload_type, s->streams[js->video_stream_index], s);
+
+   av_log(s, AV_LOG_DEBUG, "Video rtp map info: %s\n", video_rtp_map_buffer);
+   av_log(s, AV_LOG_DEBUG, "Video rtp format info: %s\n", video_rtp_format_buffer);
 
    if(js->audio_stream_index != -1)
    {
       audio_payload_type = ff_rtp_get_payload_type(s, s->streams[js->audio_stream_index]->codecpar, js->audio_stream_index);
       fill_rtp_map_info(audio_rtp_map_buffer, sizeof(audio_rtp_map_buffer), audio_payload_type, s->streams[js->audio_stream_index], s);
       fill_rtp_format_info(audio_rtp_format_buffer, sizeof(audio_rtp_format_buffer), audio_payload_type, s->streams[js->audio_stream_index], s);
+
+      av_log(s, AV_LOG_DEBUG, "Audio rtp map info: %s\n", audio_rtp_map_buffer);
+      av_log(s, AV_LOG_DEBUG, "Audio rtp format info: %s\n", audio_rtp_format_buffer);
    }
    else
    {
@@ -948,7 +944,12 @@ static int create_janus_mountpoint(AVFormatContext *s, const char *mountpoint_id
       goto fail;
     }
 
-    *video_port = strtoull(port_value, NULL, 10);
+    if(!(*video_port = strtoull(port_value, NULL, 10)))
+    {
+      av_log(s, AV_LOG_ERROR, "Can't parse video port: %s\n", port_value);
+      ret = -10004;
+      goto fail;
+    }
 
     if(js->audio_stream_index != -1)
     {
@@ -957,11 +958,16 @@ static int create_janus_mountpoint(AVFormatContext *s, const char *mountpoint_id
        if(port_value == NULL)
        {
          av_log(s, AV_LOG_ERROR, "Audio port is not found in response\n");
-         ret = -10004;
+         ret = -10005;
          goto fail;
        }
 
-       *audio_port = strtoull(port_value, NULL, 10);
+       if(!(*audio_port = strtoull(port_value, NULL, 10)))
+       {
+          av_log(s, AV_LOG_ERROR, "Can't parse audio port: %s\n", port_value);
+          ret = -10006;
+          goto fail;
+       }
     }
   }
   else
@@ -971,11 +977,16 @@ static int create_janus_mountpoint(AVFormatContext *s, const char *mountpoint_id
     if(port_value == NULL)
     {
       av_log(s, AV_LOG_ERROR, "Video port is not found in response\n");
-      ret = -10005;
+      ret = -10007;
       goto fail;
     }
 
-    *video_port = strtoull(port_value, NULL, 10);
+    if(!(*video_port = strtoull(port_value, NULL, 10)))
+    {
+      av_log(s, AV_LOG_ERROR, "Can't parse video port: %s\n", port_value);
+      ret = -10008;
+      goto fail;
+    }
 
     if(js->audio_stream_index != -1)
     {
@@ -984,11 +995,16 @@ static int create_janus_mountpoint(AVFormatContext *s, const char *mountpoint_id
        if(port_value == NULL)
        {
          av_log(s, AV_LOG_ERROR, "Audio port is not found in response\n");
-         ret = -10006;
+         ret = -10009;
          goto fail;
        }
 
-       *audio_port = strtoull(port_value, NULL, 10);
+       if(!(*audio_port = strtoull(port_value, NULL, 10)))
+       {
+          av_log(s, AV_LOG_ERROR, "Can't parse audio port: %s\n", port_value);
+          ret = -10010;
+          goto fail;
+       }
     }
   }
 
@@ -999,16 +1015,16 @@ fail:
 
 static int janus_set_rtp_remote_url(AVFormatContext *s, URLContext **rtp_handle, int port)
 {
-    char hostname[256];
+    char hostname[512];
     int ret;
     AVDictionary *opts = NULL;
-    char buf[1024];
+    char buf[2048];
 
     av_url_split(NULL, 0, NULL, 0, hostname, sizeof(hostname), NULL, NULL, 0, s->filename);
 
-    ff_url_join(buf, sizeof(buf), "rtp", NULL, hostname, port, NULL);
+    ff_url_join(buf, sizeof(buf), "rtp", NULL, hostname, port, "%s", "?localrtcpport=0");
 
-    ret = ffurl_open_whitelist(rtp_handle, buf, AVIO_FLAG_READ_WRITE,
+    ret = ffurl_open_whitelist(rtp_handle, buf, AVIO_FLAG_WRITE,
                                  &s->interrupt_callback, &opts, s->protocol_whitelist, s->protocol_blacklist, NULL);
 
     return ret;
@@ -1017,14 +1033,17 @@ static int janus_set_rtp_remote_url(AVFormatContext *s, URLContext **rtp_handle,
 static void* ensure_janus_mountpoint_exists_thread(void *arg)
 {
    int i, sleep_count, video_port, audio_port, reconnect;
+   int destroy_previous_mountpoint;
    AVFormatContext *s = (AVFormatContext *)arg;
    JanusState *js = s->priv_data;
 
+   destroy_previous_mountpoint = 1;
    while(!js->janus_thread_terminated)
    {
-      if(!create_janus_mountpoint(s, js->mountpoint_id, js->mountpoint_pin, &video_port, &audio_port))
+      if(!create_janus_mountpoint(s, js->mountpoint_id, js->mountpoint_pin, destroy_previous_mountpoint, &video_port, &audio_port))
       {
-         sleep_count = 60;
+         destroy_previous_mountpoint = 0;
+         sleep_count = 5 * 60;
          reconnect = 0;
 
          if(js->video_port != video_port)
@@ -1045,7 +1064,7 @@ static void* ensure_janus_mountpoint_exists_thread(void *arg)
            js->reconnect = reconnect;
        }
        else
-           sleep_count = 5;
+           sleep_count = 10;
 
        for (i = 0; i < sleep_count; i++) 
        {
@@ -1063,7 +1082,9 @@ static int janus_write_header(AVFormatContext *s)
 {
    JanusState *js = s->priv_data;
    AVStream *st = NULL;
+   AVCodecParameters *par;
    int i;
+   int ret;
 
    if(js->mountpoint_id == NULL)
    {
@@ -1071,7 +1092,8 @@ static int janus_write_header(AVFormatContext *s)
      return AVERROR_OPTION_NOT_FOUND;
    }
    
-   memset(&js->rtpctxes, 0, sizeof(js->rtpctxes));
+   js->video_rtpctx = NULL;
+   js->audio_rtpctx = NULL;
    js->video_stream_index = -1;
    js->audio_stream_index = -1;
    js->reconnect = 0;
@@ -1079,6 +1101,9 @@ static int janus_write_header(AVFormatContext *s)
    js->audio_port = -1;
    js->thread_terminate_cb.callback = interrupt_cb;
    js->thread_terminate_cb.opaque = js;
+   js->wait_i_frame = 0;
+   js->extradata = NULL;
+   js->extradata_copy = NULL;
 
    for(i = 0; i < s->nb_streams; i++)
    {
@@ -1098,9 +1123,28 @@ static int janus_write_header(AVFormatContext *s)
       return AVERROR_INVALIDDATA;
    }
 
-    js->janus_thread_terminated = 0;
+   par = s->streams[js->video_stream_index]->codecpar;
 
-    if(pthread_create(&js->janus_thread, NULL, &ensure_janus_mountpoint_exists_thread, s) != 0)
+   if(par->codec_id = AV_CODEC_ID_H264)
+   {
+     js->extradata_size = par->extradata_size;
+
+     if (par->extradata[0] == 1) {
+
+       if ((ret = ff_avc_write_annexb_extradata(par->extradata, &js->extradata,
+                                          &js->extradata_size)))
+          return ret;
+
+        js->extradata_copy = js->extradata;
+     }
+     else 
+        js->extradata = par->extradata;
+  
+   }
+
+   js->janus_thread_terminated = 0;
+
+   if(pthread_create(&js->janus_thread, NULL, &ensure_janus_mountpoint_exists_thread, s) != 0)
       return AVERROR(ENOMEM);
 
    return 0;
@@ -1118,6 +1162,7 @@ static int janus_write_packet(AVFormatContext *s, AVPacket *pkt)
     JanusState *js = s->priv_data;
     AVFormatContext *rtpctx;
     URLContext *urlctx;
+    AVPacket local_pkt;
     int ret;
 
     if (pkt->stream_index < 0)
@@ -1125,56 +1170,89 @@ static int janus_write_packet(AVFormatContext *s, AVPacket *pkt)
 
     if(js->reconnect)
     {
-       js->reconnect = 0;
-
-       if(js->rtpctxes[0] != NULL)
+       if(js->video_rtpctx != NULL)
        {
-         close_rtp_context(js->rtpctxes[0]);
-         js->rtpctxes[0] = NULL;
+         close_rtp_context(js->video_rtpctx);
+         js->video_rtpctx = NULL;
        }
 
-       if(js->rtpctxes[1] != NULL)
+       if(js->audio_rtpctx != NULL)
        {
-          close_rtp_context(js->rtpctxes[1]);
-          js->rtpctxes[1] = NULL;
+          close_rtp_context(js->audio_rtpctx);
+          js->audio_rtpctx = NULL;
        }
+
+       urlctx = NULL;
 
        if((ret = janus_set_rtp_remote_url(s, &urlctx, js->video_port)) < 0)
           return ret;
 
-       if ((ret = ff_rtp_chain_mux_open((AVFormatContext **)&js->rtpctxes[js->video_stream_index],
+       if ((ret = ff_rtp_chain_mux_open(&rtpctx,
                                        s, s->streams[js->video_stream_index], urlctx,
                                        RTSP_TCP_MAX_PACKET_SIZE,
                                        js->video_stream_index)) < 0)
          return ret;
-   
+
+       js->video_rtpctx = rtpctx;
 
        if(js->audio_stream_index != -1)
        {
+          urlctx = NULL;
+
           if((ret = janus_set_rtp_remote_url(s, &urlctx, js->audio_port)) < 0)
             return ret;
 
-          if ((ret = ff_rtp_chain_mux_open((AVFormatContext **)&js->rtpctxes[js->audio_stream_index],
+          if ((ret = ff_rtp_chain_mux_open(&rtpctx,
                                        s, s->streams[js->audio_stream_index], urlctx,
                                        RTSP_TCP_MAX_PACKET_SIZE,
                                        js->audio_stream_index)) < 0)
             return ret;
+
+           js->audio_rtpctx = rtpctx;
         }
+
+        js->reconnect = 0;
+        js->wait_i_frame = 1;
     }
 
     if(pkt->stream_index == js->video_stream_index)
     {
-       if(js->video_port == -1)
+       if(js->video_rtpctx == NULL)
           return 0;
 
-       rtpctx = js->rtpctxes[0];
+       rtpctx = js->video_rtpctx;
+
+       if((pkt->flags & AV_PKT_FLAG_KEY) != 0)
+       {
+         js->wait_i_frame = 0;
+
+         if(js->extradata_size > 0 && pkt->size > 4 && (pkt->data[4] & 0x1F) != 7)
+         {
+           local_pkt = *pkt;
+           local_pkt.data = js->extradata;
+           local_pkt.size = js->extradata_size;
+           local_pkt.stream_index = js->video_stream_index;
+
+           ret = ff_write_chained(rtpctx, 0, &local_pkt, s, 0);
+
+           pkt->buf = local_pkt.buf;
+           pkt->side_data       = local_pkt.side_data;
+           pkt->side_data_elems = local_pkt.side_data_elems;
+
+            if(ret)
+              return ret;
+         }
+       }
+       
+       if(js->wait_i_frame)
+           return 0;
     }
-    else if(pkt->stream_index == js->audio_stream_index)
+    else if(pkt->stream_index == js->audio_stream_index && !js->wait_i_frame)
     {
-       if(js->audio_port == -1)
+       if(js->audio_rtpctx == NULL)
           return 0;
 
-       rtpctx = js->rtpctxes[1];
+       rtpctx = js->audio_rtpctx;
     }
     else
        return 0;
@@ -1190,12 +1268,13 @@ static int janus_write_close(AVFormatContext *s)
     js->janus_thread_terminated = 1;
     pthread_join(js->janus_thread, NULL);
     pthread_detach(js->janus_thread);
+    av_free(js->extradata_copy);
 
-    if(js->rtpctxes[0] != NULL)
-      close_rtp_context(js->rtpctxes[0]);
+    if(js->video_rtpctx != NULL)
+      close_rtp_context(js->video_rtpctx);
 
-    if(js->rtpctxes[1] != NULL)
-      close_rtp_context(js->rtpctxes[1]);
+    if(js->audio_rtpctx != NULL)
+      close_rtp_context(js->audio_rtpctx);
 
     return 0;
 }
@@ -1204,11 +1283,11 @@ AVOutputFormat ff_janus_muxer = {
     .name              = "janus",
     .long_name         = NULL_IF_CONFIG_SMALL("Janus output"),
     .priv_data_size    = sizeof(JanusState),
-    .audio_codec       = AV_CODEC_ID_AAC,
+    .audio_codec       = AV_CODEC_ID_PCM_MULAW,
     .video_codec       = AV_CODEC_ID_MPEG4,
     .write_header      = janus_write_header,
     .write_packet      = janus_write_packet,
     .write_trailer     = janus_write_close,
-    .flags             = AVFMT_NOFILE | AVFMT_GLOBALHEADER,
+    .flags             = AVFMT_NOFILE | AVFMT_TS_NONSTRICT,
     .priv_class        = &janus_muxer_class,
 };

@@ -67,9 +67,8 @@ int ff_rtp_chain_mux_open(AVFormatContext **out, AVFormatContext *s,
     else
         rtpctx->streams[0]->id = st->id;
 
-
-    if (av_opt_get(s, "rtpflags", AV_OPT_SEARCH_CHILDREN, &rtpflags) >= 0)
-        av_dict_set(&opts, "rtpflags", rtpflags, AV_DICT_DONT_STRDUP_VAL);
+    /*if (av_opt_get(s, "rtpflags", AV_OPT_SEARCH_CHILDREN, &rtpflags) >= 0)
+        av_dict_set(&opts, "rtpflags", rtpflags, AV_DICT_DONT_STRDUP_VAL);*/
 
     /* Set the synchronized start time. */
     rtpctx->start_time_realtime = s->start_time_realtime;
