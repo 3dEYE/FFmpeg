@@ -183,12 +183,11 @@ static int open_http_context(AVFormatContext *s, URLContext **h, AVIOInterruptCB
     priv_data = urlctx->priv_data;
 
     av_opt_set(priv_data, "headers", headers, 0);
-    av_opt_set(priv_data, "multiple_requests", "1", 0);
-
+ 
     return 0;
 }
 
-static int send_http_json_request(AVFormatContext *s, URLContext *h, const char *path, const char *json_request, char *json_response, int json_response_max_size)
+static int send_http_json_request(AVFormatContext *s, const char *path, const char *json_request, char *json_response, int json_response_max_size)
 {
    char proto[32];
    char hostname[512];
@@ -197,6 +196,11 @@ static int send_http_json_request(AVFormatContext *s, URLContext *h, const char 
    int ret;
    char *status;
    int request_length;
+   URLContext *h;
+   JanusState *js = s->priv_data;
+
+   if((ret = open_http_context(s, &h, &js->thread_terminate_cb)) < 0)
+     return ret;
 
    av_url_split(proto, sizeof(proto), NULL, 0, hostname, sizeof(hostname), &port, NULL, 0, s->filename);
 
@@ -206,10 +210,10 @@ static int send_http_json_request(AVFormatContext *s, URLContext *h, const char 
    av_opt_set_bin(h->priv_data, "post_data", json_request, request_length, 0);
 
    if ((ret = ff_http_do_new_request(h, buf)) < 0)
-       return ret;
+       goto fail;
    
    if ((ret = ffurl_read(h, json_response, json_response_max_size - 1)) < 0)
-      return ret;
+      goto fail;
    
    json_response[ret] = '\0';
 
@@ -218,16 +222,21 @@ static int send_http_json_request(AVFormatContext *s, URLContext *h, const char 
    if(status == NULL)
    {
       av_log(s, AV_LOG_ERROR, "Status is not found in response\n");
-      return -1;
+      ret = -1;
+      goto fail;
    }
 
    if(strcmpi(status, "success") != 0)
    {
       av_log(s, AV_LOG_ERROR, "Server error response: %s\n", status);
-      return -2;
+      ret = -2;
+      goto fail;
    }
-
-   return 0;
+   else
+      ret = 0;
+fail:
+   ffurl_close(h);
+   return ret;
 }
 
 static void fill_rtp_map_info(char *buff, int size, int payload_type, AVStream *st, AVFormatContext *fmt)
@@ -820,7 +829,9 @@ static void fill_rtp_format_info(char *buff, int size, int payload_type, AVStrea
 static int create_janus_mountpoint(AVFormatContext *s, const char *mountpoint_id, const char *mountpoint_pin, int destroy_previous_mountpoint, int *video_port, int *audio_port)
 {     
    const char *create_session_request = "{\"janus\":\"create\",\"transaction\":\"sBJNyUhH6Vc6\"}";
+   const char *destroy_session_request = "{\"janus\":\"destroy\",\"transaction\":\"1YUgyfhH0Vp3\"}";
    const char *attach_plugin_request = "{\"janus\":\"attach\",\"transaction\":\"xWJquAhH6dc2\",\"plugin\":\"janus.plugin.streaming\"}";
+   const char *detach_plugin_request = "{\"janus\":\"detach\",\"transaction\":\"vZdFuGtJy213\"}";
    const char *create_mountpoint_request_template = "{\"janus\":\"message\",\"transaction\":\"hRJNyehH2jc4\",\"body\":{\"request\":\"create\",\"secret\":\"3DEYE\",%s\"type\":\"rtp\",\"id\":%s,\"name\":\"%s\",\"video\":true,\"videortpmap\":\"%s\",\"videopt\":%d,\"videofmtp\":\"%s\",\"videoport\":0,\"audio\":%s,\"audiortpmap\":\"%s\",\"audiopt\":%d,\"audiofmtp\":\"%s\",\"audioport\":0}}";
    const char *info_mountpoint_template = "{\"janus\":\"message\",\"transaction\":\"tRJRyeaV7fc0\",\"body\":{\"request\":\"info\",\"id\":%s,\"secret\":\"3DEYE\"}}";
    const char *destroy_mountpoint_request_template = "{\"janus\":\"message\",\"transaction\":\"cxJRyhtB1lo0\",\"body\":{\"request\":\"destroy\",\"id\":%s,\"secret\":\"3DEYE\"}}";
@@ -841,13 +852,9 @@ static int create_janus_mountpoint(AVFormatContext *s, const char *mountpoint_id
    int video_payload_type;
    int audio_payload_type;
    int ret;
-   URLContext *h;
    JanusState *js = s->priv_data;
 
-   if((ret = open_http_context(s, &h, &js->thread_terminate_cb)) < 0)
-     return ret;
-
-   if((ret = send_http_json_request(s, h, "/janus", create_session_request, janus_response, sizeof(janus_response))) < 0)
+   if((ret = send_http_json_request(s, "/janus", create_session_request, janus_response, sizeof(janus_response))) < 0)
      goto fail;
 
    session_id = read_json_value(janus_response, "id", session_buffer, sizeof(session_buffer));
@@ -861,7 +868,7 @@ static int create_janus_mountpoint(AVFormatContext *s, const char *mountpoint_id
 
    snprintf(path_buffer, sizeof(path_buffer), "/janus/%s", session_id);
 
-   if((ret = send_http_json_request(s, h, path_buffer, attach_plugin_request, janus_response, sizeof(janus_response))) < 0)
+   if((ret = send_http_json_request(s, path_buffer, attach_plugin_request, janus_response, sizeof(janus_response))) < 0)
      goto fail;
 
    plugin_id = read_json_value(janus_response, "id", plugin_id_buffer, sizeof(plugin_id_buffer));
@@ -870,7 +877,7 @@ static int create_janus_mountpoint(AVFormatContext *s, const char *mountpoint_id
    {
      av_log(s, AV_LOG_ERROR, "Plugin id is not found in json.\n");
      ret = -10001;
-     goto fail;
+     goto destroy_session;
    }
 
    snprintf(path_buffer, sizeof(path_buffer), "/janus/%s/%s", session_id, plugin_id);
@@ -879,7 +886,7 @@ static int create_janus_mountpoint(AVFormatContext *s, const char *mountpoint_id
    {
       snprintf(buffer, sizeof(buffer), destroy_mountpoint_request_template, mountpoint_id);
 
-      if((ret = send_http_json_request(s, h, path_buffer, buffer, janus_response, sizeof(janus_response))) < 0)
+      if((ret = send_http_json_request(s, path_buffer, buffer, janus_response, sizeof(janus_response))) < 0)
          goto fail;
    }
 
@@ -916,7 +923,7 @@ static int create_janus_mountpoint(AVFormatContext *s, const char *mountpoint_id
     js->audio_stream_index != -1 ? "true" : "false", audio_rtp_map_buffer, 
     audio_payload_type, audio_rtp_format_buffer);
 
-   if((ret = send_http_json_request(s, h, path_buffer, buffer, janus_response, sizeof(janus_response))) < 0)
+   if((ret = send_http_json_request(s, path_buffer, buffer, janus_response, sizeof(janus_response))) < 0)
      goto fail;
 
   error_code = read_json_value(janus_response, "error_code", buffer, sizeof(buffer));
@@ -927,12 +934,12 @@ static int create_janus_mountpoint(AVFormatContext *s, const char *mountpoint_id
     {
        av_log(s, AV_LOG_ERROR, "Unknown error code in json response: %s\n", error_code);
        ret = -10002;
-       goto fail;
+       goto detach_plugin;
     }
 
     snprintf(buffer, sizeof(buffer), info_mountpoint_template, mountpoint_id);
 
-    if((ret = send_http_json_request(s, h, path_buffer, buffer, janus_response, sizeof(janus_response))) < 0)
+    if((ret = send_http_json_request(s, path_buffer, buffer, janus_response, sizeof(janus_response))) < 0)
       goto fail;
 
     port_value = read_json_value(janus_response, "videoport", buffer, sizeof(buffer));
@@ -941,14 +948,14 @@ static int create_janus_mountpoint(AVFormatContext *s, const char *mountpoint_id
     {
       av_log(s, AV_LOG_ERROR, "Video port is not found in response\n");
       ret = -10003;
-      goto fail;
+      goto detach_plugin;
     }
 
     if(!(*video_port = strtoull(port_value, NULL, 10)))
     {
       av_log(s, AV_LOG_ERROR, "Can't parse video port: %s\n", port_value);
       ret = -10004;
-      goto fail;
+      goto detach_plugin;
     }
 
     if(js->audio_stream_index != -1)
@@ -959,14 +966,14 @@ static int create_janus_mountpoint(AVFormatContext *s, const char *mountpoint_id
        {
          av_log(s, AV_LOG_ERROR, "Audio port is not found in response\n");
          ret = -10005;
-         goto fail;
+         goto detach_plugin;
        }
 
        if(!(*audio_port = strtoull(port_value, NULL, 10)))
        {
           av_log(s, AV_LOG_ERROR, "Can't parse audio port: %s\n", port_value);
           ret = -10006;
-          goto fail;
+          goto detach_plugin;
        }
     }
   }
@@ -978,14 +985,14 @@ static int create_janus_mountpoint(AVFormatContext *s, const char *mountpoint_id
     {
       av_log(s, AV_LOG_ERROR, "Video port is not found in response\n");
       ret = -10007;
-      goto fail;
+      goto detach_plugin;
     }
 
     if(!(*video_port = strtoull(port_value, NULL, 10)))
     {
       av_log(s, AV_LOG_ERROR, "Can't parse video port: %s\n", port_value);
       ret = -10008;
-      goto fail;
+      goto detach_plugin;
     }
 
     if(js->audio_stream_index != -1)
@@ -996,20 +1003,31 @@ static int create_janus_mountpoint(AVFormatContext *s, const char *mountpoint_id
        {
          av_log(s, AV_LOG_ERROR, "Audio port is not found in response\n");
          ret = -10009;
-         goto fail;
+         goto detach_plugin;
        }
 
        if(!(*audio_port = strtoull(port_value, NULL, 10)))
        {
           av_log(s, AV_LOG_ERROR, "Can't parse audio port: %s\n", port_value);
           ret = -10010;
-          goto fail;
+          goto detach_plugin;
        }
     }
   }
 
+detach_plugin:
+   snprintf(path_buffer, sizeof(path_buffer), "/janus/%s/%s", session_id, plugin_id);
+
+   if((ret = send_http_json_request(s, path_buffer, detach_plugin_request, janus_response, sizeof(janus_response))) < 0)
+     goto fail;
+
+destroy_session:
+   snprintf(path_buffer, sizeof(path_buffer), "/janus/%s", session_id);
+
+   if((ret = send_http_json_request(s, path_buffer, destroy_session_request, janus_response, sizeof(janus_response))) < 0)
+     goto fail;
+
 fail:
-  ffurl_close(h);
   return ret;
 }
 
