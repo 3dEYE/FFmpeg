@@ -237,6 +237,7 @@ static int send_http_json_request(AVFormatContext *s, const char *path, const ch
    else
       ret = 0;
 fail:
+   ff_http_close(h);
    ffurl_close(h);
    return ret;
 }

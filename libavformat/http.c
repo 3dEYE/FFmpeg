@@ -1577,6 +1577,11 @@ static int http_close(URLContext *h)
     return ret;
 }
 
+int ff_http_close(URLContext *h)
+{
+  return http_close(h);
+}
+
 static int64_t http_seek_internal(URLContext *h, int64_t off, int whence, int force_reconnect)
 {
     HTTPContext *s = h->priv_data;
