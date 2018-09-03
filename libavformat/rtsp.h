@@ -407,6 +407,12 @@ typedef struct RTSPState {
      */
     char *user_agent;
 
+
+    /**
+     * Public IP address when using RTSP over UDP connection
+     */
+    char *public_ip;
+
     char default_lang[4];
     int buffer_size;
     
