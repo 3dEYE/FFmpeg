@@ -1567,12 +1567,12 @@ static int http_close(URLContext *h)
     av_freep(&s->inflate_buffer);
 #endif /* CONFIG_ZLIB */
 
-    if (!s->end_chunked_post)
-        /* Close the write direction by sending the end of chunked encoding. */
-        ret = http_shutdown(h, h->flags);
-
-    if (s->hd)
-        ffurl_closep(&s->hd);
+    if (s->hd) {
+      if (!s->end_chunked_post)
+         /* Close the write direction by sending the end of chunked encoding. */
+         ret = http_shutdown(h, h->flags);
+      ffurl_closep(&s->hd);
+    }
     av_dict_free(&s->chained_options);
     return ret;
 }
