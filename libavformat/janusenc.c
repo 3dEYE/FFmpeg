@@ -50,6 +50,7 @@ typedef struct JanusState {
   int audio_stream_index;
   char *mountpoint_id;
   char *mountpoint_pin;
+  char *admin_key;
   int mountpoint_is_private;
   uint8_t *extradata;
   uint8_t *extradata_copy;
@@ -70,6 +71,7 @@ static const AVOption options[] = {
     { "mountpoint_id", "Janus mount point id", OFFSET(mountpoint_id), AV_OPT_TYPE_STRING, { .str = NULL }, 0, 0, E },
     { "mountpoint_pin", "Janus mount point pin code", OFFSET(mountpoint_pin), AV_OPT_TYPE_STRING, { .str = NULL }, 0, 0, E },
     { "mountpoint_private", "Janus mount point should be private", OFFSET(mountpoint_is_private), AV_OPT_TYPE_BOOL, { .i64 = 0 }, 0, 1, E },
+    { "admin_key", "Janus API key", OFFSET(admin_key), AV_OPT_TYPE_STRING, { .str = NULL }, 0, 0, E },
     { NULL }
 };
 
@@ -829,15 +831,15 @@ static void fill_rtp_format_info(char *buff, int size, int payload_type, AVStrea
     av_free(config);
 }
 
-static int create_janus_mountpoint(AVFormatContext *s, const char *mountpoint_id, const char *mountpoint_pin, int mountpoint_is_private, int destroy_previous_mountpoint, int *video_port, int *audio_port)
+static int create_janus_mountpoint(AVFormatContext *s, const char *admin_key, const char *mountpoint_id, const char *mountpoint_pin, int mountpoint_is_private, int destroy_previous_mountpoint, int *video_port, int *audio_port)
 {     
    const char *create_session_request = "{\"janus\":\"create\",\"transaction\":\"sBJNyUhH6Vc6\"}";
    const char *destroy_session_request = "{\"janus\":\"destroy\",\"transaction\":\"1YUgyfhH0Vp3\"}";
    const char *attach_plugin_request = "{\"janus\":\"attach\",\"transaction\":\"xWJquAhH6dc2\",\"plugin\":\"janus.plugin.streaming\"}";
    const char *detach_plugin_request = "{\"janus\":\"detach\",\"transaction\":\"vZdFuGtJy213\"}";
-   const char *create_mountpoint_request_template = "{\"janus\":\"message\",\"transaction\":\"hRJNyehH2jc4\",\"body\":{\"request\":\"create\",\"secret\":\"3DEYE\",%s\"type\":\"rtp\",\"is_private\":%s,\"id\":%s,\"name\":\"%s\",\"video\":true,\"videortpmap\":\"%s\",\"videopt\":%d,\"videofmtp\":\"%s\",\"videoport\":0,\"audio\":%s,\"audiortpmap\":\"%s\",\"audiopt\":%d,\"audiofmtp\":\"%s\",\"audioport\":0}}";
-   const char *info_mountpoint_template = "{\"janus\":\"message\",\"transaction\":\"tRJRyeaV7fc0\",\"body\":{\"request\":\"info\",\"id\":%s,\"secret\":\"3DEYE\"}}";
-   const char *destroy_mountpoint_request_template = "{\"janus\":\"message\",\"transaction\":\"cxJRyhtB1lo0\",\"body\":{\"request\":\"destroy\",\"id\":%s,\"secret\":\"3DEYE\"}}";
+   const char *create_mountpoint_request_template = "{\"janus\":\"message\",\"transaction\":\"hRJNyehH2jc4\",\"body\":{\"request\":\"create\",\"secret\":\"3DEYE_KEY_!\",%s%s\"type\":\"rtp\",\"is_private\":%s,\"id\":%s,\"name\":\"%s\",\"video\":true,\"videortpmap\":\"%s\",\"videopt\":%d,\"videofmtp\":\"%s\",\"videoport\":0,\"audio\":%s,\"audiortpmap\":\"%s\",\"audiopt\":%d,\"audiofmtp\":\"%s\",\"audioport\":0}}";
+   const char *info_mountpoint_template = "{\"janus\":\"message\",\"transaction\":\"tRJRyeaV7fc0\",\"body\":{\"request\":\"info\",\"id\":%s,\"secret\":\"3DEYE_KEY_!\"}}";
+   const char *destroy_mountpoint_request_template = "{\"janus\":\"message\",\"transaction\":\"cxJRyhtB1lo0\",\"body\":{\"request\":\"destroy\",\"id\":%s,\"secret\":\"3DEYE_KEY_!\"}}";
    const char *trueString = "true";
    const char *falseString = "false";
    char janus_response[1024];
@@ -848,6 +850,7 @@ static int create_janus_mountpoint(AVFormatContext *s, const char *mountpoint_id
    char audio_rtp_map_buffer[256];
    char video_rtp_format_buffer[256];
    char audio_rtp_format_buffer[256];
+   char admin_key_buffer[512];
    char pin_buffer[512];
    char buffer[4096];
    char *session_id;
@@ -918,12 +921,17 @@ static int create_janus_mountpoint(AVFormatContext *s, const char *mountpoint_id
       audio_payload_type = 0;
    }
 
+   if(admin_key != NULL)
+     snprintf(admin_key_buffer, sizeof(admin_key_buffer), "\"admin_key\":\"%s\",", admin_key);
+   else
+     *admin_key_buffer = '\0';
+
    if(mountpoint_pin != NULL)
       snprintf(pin_buffer, sizeof(pin_buffer), "\"pin\":\"%s\",", mountpoint_pin);
    else
       *pin_buffer = '\0';
 
-   snprintf(buffer, sizeof(buffer), create_mountpoint_request_template, pin_buffer, mountpoint_is_private == 1 ? trueString : falseString, mountpoint_id, mountpoint_id, 
+   snprintf(buffer, sizeof(buffer), create_mountpoint_request_template, admin_key_buffer, pin_buffer, mountpoint_is_private == 1 ? trueString : falseString, mountpoint_id, mountpoint_id, 
      video_rtp_map_buffer, video_payload_type, video_rtp_format_buffer, 
     js->audio_stream_index != -1 ? trueString : falseString, audio_rtp_map_buffer, 
     audio_payload_type, audio_rtp_format_buffer);
@@ -1063,7 +1071,7 @@ static void* ensure_janus_mountpoint_exists_thread(void *arg)
    destroy_previous_mountpoint = 1;
    while(!js->janus_thread_terminated)
    {
-      if(!create_janus_mountpoint(s, js->mountpoint_id, js->mountpoint_pin, js->mountpoint_is_private, destroy_previous_mountpoint, &video_port, &audio_port))
+      if(!create_janus_mountpoint(s, js->admin_key, js->mountpoint_id, js->mountpoint_pin, js->mountpoint_is_private, destroy_previous_mountpoint, &video_port, &audio_port))
       {
          destroy_previous_mountpoint = 0;
          sleep_count = 5 * 60;
