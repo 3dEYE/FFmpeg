@@ -124,6 +124,7 @@ typedef struct SegmentContext {
     SegmentListEntry cur_entry;
     SegmentListEntry *segment_list_entries;
     SegmentListEntry *segment_list_entries_end;
+    int64_t segment_start_time;
 } SegmentContext;
 
 static void print_csv_escaped_str(AVIOContext *ctx, const char *str)
@@ -807,6 +808,7 @@ static int seg_write_header(AVFormatContext *s)
     av_log(s, AV_LOG_INFO, "segment_start_time:\"%s\"\n", buffer);
 
     oc->firstframe_wallclocktime = s->firstframe_wallclocktime;
+    seg->segment_start_time = s->firstframe_wallclocktime;
 
     if (!seg->header_written) {
         for (i = 0; i < s->nb_streams; i++) {
@@ -911,9 +913,10 @@ calc_times:
         if ((ret = segment_end(s, seg->individual_header_trailer, 0)) < 0)
             goto fail;
 
-        if ((ret = segment_start(s, seg->individual_header_trailer, cur_time)) < 0)
+        if ((ret = segment_start(s, seg->individual_header_trailer, seg->segment_start_time)) < 0)
             goto fail;
 
+        seg->segment_start_time = cur_time;
         seg->cut_pending = 0;
         seg->cur_entry.index = seg->segment_idx + seg->segment_idx_wrap * seg->segment_idx_wrap_nb;
         seg->cur_entry.start_time = (double)pkt->pts * av_q2d(st->time_base);
