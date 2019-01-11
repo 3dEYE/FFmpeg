@@ -1156,7 +1156,7 @@ static int janus_write_header(AVFormatContext *s)
 
    par = s->streams[js->video_stream_index]->codecpar;
 
-   if(par->codec_id = AV_CODEC_ID_H264)
+   if(par->codec_id == AV_CODEC_ID_H264)
    {
      js->extradata_size = par->extradata_size;
 
