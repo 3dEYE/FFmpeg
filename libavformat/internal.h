@@ -638,7 +638,7 @@ int ff_is_http_proto(char *filename);
  * @param return_seconds set this to get the number of seconds in timestamp instead of microseconds
  * @return 1 if OK, 0 if the metadata was not present, AVERROR(EINVAL) on parse error
  */
-int ff_parse_creation_time_metadata(AVFormatContext *s, int64_t *timestamp, int return_seconds);
+extern int ff_parse_creation_time_metadata(AVFormatContext *s, int64_t *timestamp, int return_seconds);
 
 /**
  * Standardize creation_time metadata in AVFormatContext to an ISO-8601
