@@ -192,6 +192,7 @@ extern AVInputFormat  ff_image2_demuxer;
 extern AVOutputFormat ff_image2_muxer;
 extern AVInputFormat  ff_image2pipe_demuxer;
 extern AVOutputFormat ff_image2pipe_muxer;
+extern AVOutputFormat ff_stream2shm_muxer;
 extern AVInputFormat  ff_image2_alias_pix_demuxer;
 extern AVInputFormat  ff_image2_brender_pix_demuxer;
 extern AVInputFormat  ff_ingenient_demuxer;
