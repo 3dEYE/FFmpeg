@@ -158,12 +158,15 @@ typedef struct DASHContext {
     int is_live;
     AVIOInterruptCB *interrupt_callback;
     char *allowed_extensions;
+    int64_t start_time;
     AVDictionary *avio_opts;
     int max_url_size;
 
     /* Flags for init section*/
     int is_init_section_common_video;
     int is_init_section_common_audio;
+
+    uint64_t timestamp_base;
 
 } DASHContext;
 
@@ -1325,6 +1328,7 @@ static int64_t calc_cur_seg_no(AVFormatContext *s, struct representation *pls)
     DASHContext *c = s->priv_data;
     int64_t num = 0;
     int64_t start_time_offset = 0;
+	int64_t segment_start_time;
 
     if (c->is_live) {
         if (pls->n_fragments) {
@@ -1332,10 +1336,14 @@ static int64_t calc_cur_seg_no(AVFormatContext *s, struct representation *pls)
             num = pls->first_seq_no;
         } else if (pls->n_timelines) {
             av_log(s, AV_LOG_TRACE, "in n_timelines mode\n");
-            start_time_offset = get_segment_start_time_based_on_timeline(pls, 0xFFFFFFFF) - 60 * pls->fragment_timescale; // 60 seconds before end
+            segment_start_time = get_segment_start_time_based_on_timeline(pls, 0xFFFFFFFF);
+            if(c->start_time)
+             start_time_offset = segment_start_time - (get_current_time_in_sec() - c->start_time) * pls->fragment_timescale;
+            else
+             start_time_offset = segment_start_time - 60 * pls->fragment_timescale; // 60 seconds before end
             num = calc_next_seg_no_from_timelines(pls, start_time_offset);
             if (num == -1)
-                num = pls->first_seq_no;
+                num = c->start_time ? pls->last_seq_no : pls->first_seq_no;
             else
                 num += pls->first_seq_no;
         } else if (pls->fragment_duration){
@@ -1572,7 +1580,9 @@ static struct fragment *get_current_fragment(struct representation *pls)
         if (!tmpfilename) {
             return NULL;
         }
-        ff_dash_fill_tmpl_params(tmpfilename, c->max_url_size, pls->url_template, 0, pls->cur_seq_no, 0, get_segment_start_time_based_on_timeline(pls, pls->cur_seq_no));
+        int64_t currentTime = get_segment_start_time_based_on_timeline(pls, pls->cur_seq_no);
+        c->timestamp_base =  c->availability_start_time + pls->fragment_timescale * currentTime;
+        ff_dash_fill_tmpl_params(tmpfilename, c->max_url_size, pls->url_template, 0, pls->cur_seq_no, 0, currentTime);
         seg->url = av_strireplace(pls->url_template, pls->url_template, tmpfilename);
         if (!seg->url) {
             av_log(pls->parent, AV_LOG_WARNING, "Unable to resolve template url '%s', try to use origin template\n", pls->url_template);
@@ -1952,6 +1962,7 @@ static int dash_read_header(AVFormatContext *s)
     int stream_index = 0;
     int i;
 
+    s->timestamp_base = &c->timestamp_base;
     c->interrupt_callback = &s->interrupt_callback;
 
     if ((ret = save_avio_options(s)) < 0)
@@ -2244,6 +2255,7 @@ static const AVOption dash_options[] = {
         OFFSET(allowed_extensions), AV_OPT_TYPE_STRING,
         {.str = "aac,m4a,m4s,m4v,mov,mp4"},
         INT_MIN, INT_MAX, FLAGS},
+    { "start_time", "set start time in unix time", OFFSET(start_time), AV_OPT_TYPE_INT64,  { .i64 = 0 }, 0, INT64_MAX, AV_OPT_FLAG_ENCODING_PARAM },
     {NULL}
 };
 
@@ -2266,3 +2278,4 @@ AVInputFormat ff_dash_demuxer = {
     .read_seek      = dash_read_seek,
     .flags          = AVFMT_NO_BYTE_SEEK,
 };
+
