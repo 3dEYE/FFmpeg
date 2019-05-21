@@ -1944,6 +1944,8 @@ typedef struct AVFormatContext {
      * - decoding: set by user
      */
     int skip_estimate_duration_from_pts;
+
+    uint64_t *timestamp_base;
 } AVFormatContext;
 
 #if FF_API_FORMAT_GET_SET
