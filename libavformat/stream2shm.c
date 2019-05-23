@@ -3,7 +3,6 @@
 #include "internal.h"
 #include <libswscale/swscale.h>
 
-
 #if defined(__linux__)
     #include <fcntl.h>
     #include <unistd.h>
@@ -104,7 +103,7 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt)
 
  frame = (AVFrame *)pkt->data;
 
- if(h->current_width != width || h->current_height) {
+ if(h->current_width != width || h->current_height != height) {
   snprintf(filename, 512, "%s_img", s->url);
 
 #if defined(__linux__)
@@ -127,7 +126,7 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt)
   if(ftruncate(h->image_buffer_handle, h->image_buffer_length) != 0)
     return -1;
 
-  h->image_buffer_ptr = mmap(NULL, h->image_buffer_handle, PROT_WRITE, MAP_SHARED, h->image_buffer_handle, 0);
+  h->image_buffer_ptr = mmap(NULL, h->image_buffer_length, PROT_WRITE, MAP_SHARED, h->image_buffer_handle, 0);
 
   if(h->image_buffer_ptr == MAP_FAILED) {
     close(h->image_buffer_handle);
@@ -185,6 +184,9 @@ static int write_trailer(struct AVFormatContext *s)
  }
 
 #endif
+
+ if(h->sws_ctx != NULL)
+  sws_freeContext(h->sws_ctx);
   
  return 0;
 }
