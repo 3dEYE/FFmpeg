@@ -40,7 +40,7 @@ static int write_header(AVFormatContext *s)
 
  h->image_buffer_ptr = MAP_FAILED;
  h->image_buffer_handle = -1;
- h->cmd_file_handle = shm_open(s->url, O_RDWR, S_IWUSR | S_IRUSR);
+ h->cmd_file_handle = shm_open(s->url, O_RDWR, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
 
  if(h->cmd_file_handle == -1) {
    av_log(s, AV_LOG_ERROR, "Command file open failed\n");
@@ -103,7 +103,7 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt)
    shm_unlink(filename);
   }
 
-  h->image_buffer_handle = shm_open(filename, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
+  h->image_buffer_handle = shm_open(filename, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
 
   if(h->image_buffer_handle == -1) {
     av_log(s, AV_LOG_ERROR, "Shared image file create failed\n");
