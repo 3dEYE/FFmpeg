@@ -145,6 +145,7 @@ typedef struct DASHContext {
     uint64_t media_presentation_duration;
     uint64_t suggested_presentation_delay;
     uint64_t availability_start_time;
+    uint64_t availability_start_time_ms;
     uint64_t availability_end_time;
     uint64_t publish_time;
     uint64_t minimum_update_period;
@@ -1228,6 +1229,7 @@ static int parse_manifest(AVFormatContext *s, const char *url, AVIOContext *in)
 
             if (!av_strcasecmp(attr->name, (const char *)"availabilityStartTime")) {
                 c->availability_start_time = get_utc_date_time_insec(s, (const char *)val);
+                c->availability_start_time_ms = c->availability_start_time * 1000;
                 av_log(s, AV_LOG_TRACE, "c->availability_start_time = [%"PRId64"]\n", c->availability_start_time);
             } else if (!av_strcasecmp(attr->name, (const char *)"availabilityEndTime")) {
                 c->availability_end_time = get_utc_date_time_insec(s, (const char *)val);
@@ -1581,7 +1583,7 @@ static struct fragment *get_current_fragment(struct representation *pls)
             return NULL;
         }
         int64_t currentTime = get_segment_start_time_based_on_timeline(pls, pls->cur_seq_no);
-        c->timestamp_base =  c->availability_start_time + pls->fragment_timescale * currentTime;
+        c->timestamp_base =  c->availability_start_time_ms + currentTime / pls->fragment_timescale * 1000;
         ff_dash_fill_tmpl_params(tmpfilename, c->max_url_size, pls->url_template, 0, pls->cur_seq_no, 0, currentTime);
         seg->url = av_strireplace(pls->url_template, pls->url_template, tmpfilename);
         if (!seg->url) {

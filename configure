@@ -5294,6 +5294,7 @@ case $target_os in
     linux)
         enable section_data_rel_ro
         enabled_any arm aarch64 && enable_weak linux_perf
+        add_extralibs -lrt
         ;;
     irix*)
         target_os=irix
