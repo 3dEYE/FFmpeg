@@ -81,22 +81,6 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt)
   usleep(8 * 1000);
  }
 
- switch (st->codecpar->format) {
-    case AV_PIX_FMT_GRAY8:
-    case AV_PIX_FMT_YUV411P:
-    case AV_PIX_FMT_YUV420P:
-    case AV_PIX_FMT_YUV422P:
-    case AV_PIX_FMT_YUV444P:
-    case AV_PIX_FMT_YUVJ420P:
-    case AV_PIX_FMT_YUVJ422P:
-    case AV_PIX_FMT_YUVJ444P:
-        break;
-    default:
-        av_log(s, AV_LOG_ERROR, "The pixel format '%s' is not supported.\n",
-               av_get_pix_fmt_name(st->codecpar->format));
-        return AVERROR(EINVAL);
- }
-
  width  = st->codecpar->width;
  height = st->codecpar->height;
  stride = width * 3;
@@ -116,7 +100,7 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt)
    shm_unlink(filename);
   }
 
-  h->image_buffer_handle = shm_open(filename, O_WRONLY | O_CREAT, S_IRUSR);
+  h->image_buffer_handle = shm_open(filename, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
 
   if(h->image_buffer_handle == -1)
     return -1;
