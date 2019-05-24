@@ -146,8 +146,9 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt)
  if(sws_scale(h->sws_ctx, (const uint8_t * const*)frame->data, frame->linesize, 0, height, (uint8_t **)&h->image_buffer_ptr, &stride) != height)
   return -1;
 
+if(st->codecpar->width * 3 != stride) {
     av_log(s, AV_LOG_ERROR, "my = %d this = %d\n", st->codecpar->width * 3, stride);
-return -1;
+return -1; }
  time_base = &s->streams[pkt->stream_index]->time_base;
 
  cbd->timestamp = *s->timestamp_base + pkt->pts * 1000 * time_base->num / time_base->den;
