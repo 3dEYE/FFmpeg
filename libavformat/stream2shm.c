@@ -110,7 +110,7 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt)
   }
 
   h->image_buffer_length = stride * height;
-
+av_log(s, AV_LOG_ERROR, "Params: ln=%d w=%d h=%d s=%d\n", h->image_buffer_length, width, height, stride);
   if(ftruncate(h->image_file_handle, h->image_buffer_length) != 0) {
     av_log(s, AV_LOG_ERROR, "Shared image file \"%s\" truncate failed\n", filename);
     return -1;
@@ -119,6 +119,7 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt)
   h->image_buffer_ptr = mmap(NULL, h->image_buffer_length, PROT_WRITE, MAP_SHARED, h->image_file_handle, 0);
 
   if(h->image_buffer_ptr == MAP_FAILED) {
+av_log(s, AV_LOG_ERROR, "Map errno %d %s\n", errno, strerror(errno));
     av_log(s, AV_LOG_ERROR, "Map image file \"%s\" failed\n", filename);
     close(h->image_file_handle);
     shm_unlink(filename);
