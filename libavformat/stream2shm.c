@@ -10,7 +10,7 @@
 #endif
 
 typedef struct CommandBufferData {
-    char ready_flag;
+    int ready_flag;
     uint64_t timestamp;
     int width;
     int height;
@@ -141,6 +141,7 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt)
   return -1;
 
  time_base = &s->streams[pkt->stream_index]->time_base;
+
  cbd->timestamp = *s->timestamp_base + pkt->pts * 1000 * time_base->num / time_base->den;
  cbd->width = width;
  cbd->height = height;
