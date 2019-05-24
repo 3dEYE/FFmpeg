@@ -52,7 +52,6 @@ static int write_header(AVFormatContext *s)
  if(h->cmd_buffer_ptr == MAP_FAILED) {
    av_log(s, AV_LOG_ERROR, "Map Command file \"%s\" failed\n", s->url);
    close(h->cmd_file_handle);
-   shm_unlink(s->url);
    return -1;
  }
 
@@ -170,11 +169,9 @@ static int write_trailer(struct AVFormatContext *s)
  if(h->cmd_buffer_ptr != MAP_FAILED)
   munmap(h->cmd_buffer_ptr, COMMAND_BUFFER_LENGTH);
 
- if(h->cmd_file_handle != -1 ) {
+ if(h->cmd_file_handle != -1 )
   close(h->cmd_file_handle);
-  shm_unlink(s->url);
- }
-
+ 
 #endif
 
  if(h->sws_ctx != NULL)
