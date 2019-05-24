@@ -98,16 +98,13 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt)
   if(h->image_buffer_ptr != MAP_FAILED)
    munmap(h->image_buffer_ptr, h->image_buffer_length);
 
-  if(h->image_file_handle != -1 ) {
-   close(h->image_file_handle);
-   shm_unlink(filename);
-  }
+  if(h->image_file_handle == -1 ) {
+    h->image_file_handle = shm_open(filename, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
 
-  h->image_file_handle = shm_open(filename, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
-
-  if(h->image_file_handle == -1) {
-    av_log(s, AV_LOG_ERROR, "Shared image file \"%s\" create failed\n", filename);
-    return -1;
+   if(h->image_file_handle == -1) {
+     av_log(s, AV_LOG_ERROR, "Shared image file \"%s\" create failed\n", filename);
+     return -1;
+   }
   }
 
   h->image_buffer_length = stride * height;
@@ -146,11 +143,7 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt)
  if(sws_scale(h->sws_ctx, (const uint8_t * const*)frame->data, frame->linesize, 0, height, (uint8_t **)&h->image_buffer_ptr, &stride) != height)
   return -1;
 
-if(st->codecpar->width * 3 != stride) {
-    av_log(s, AV_LOG_ERROR, "my = %d this = %d\n", st->codecpar->width * 3, stride);
-return -1; }
  time_base = &s->streams[pkt->stream_index]->time_base;
-
  cbd->timestamp = *s->timestamp_base + pkt->pts * 1000 * time_base->num / time_base->den;
  cbd->width = width;
  cbd->height = height;
@@ -173,7 +166,6 @@ static int write_trailer(struct AVFormatContext *s)
  if(h->image_file_handle != -1 ) {
   close(h->image_file_handle);
   snprintf(filename, 512, "%s_img", s->url);
-  shm_unlink(filename);
  }
 
  if(h->cmd_buffer_ptr != MAP_FAILED)
