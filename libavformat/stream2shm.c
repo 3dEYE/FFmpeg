@@ -43,8 +43,8 @@ static int write_header(AVFormatContext *s)
  h->cmd_file_handle = shm_open(s->url, O_RDWR, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
 
  if(h->cmd_file_handle == -1) {
-   av_log(s, AV_LOG_ERROR, "Command file open failed\n");
-   return -1;
+   av_log(s, AV_LOG_ERROR, "Command file \"%s\" open failed\n", s->url);
+   return errno;
  }
 
  h->cmd_buffer_ptr = mmap(NULL, COMMAND_BUFFER_LENGTH, PROT_READ | PROT_WRITE, MAP_SHARED, h->cmd_file_handle, 0);
@@ -53,7 +53,7 @@ static int write_header(AVFormatContext *s)
    av_log(s, AV_LOG_ERROR, "Map Command file failed\n");
    close(h->cmd_file_handle);
    shm_unlink(s->url);
-   return -1;
+   return errno;
  }
 
 #endif
@@ -106,15 +106,15 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt)
   h->image_buffer_handle = shm_open(filename, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
 
   if(h->image_buffer_handle == -1) {
-    av_log(s, AV_LOG_ERROR, "Shared image file create failed\n");
-    return -1;
+    av_log(s, AV_LOG_ERROR, "Shared image file \"%s\" create failed\n", filename);
+    return errno;
   }
 
   h->image_buffer_length = stride * height;
 
   if(ftruncate(h->image_buffer_handle, h->image_buffer_length) != 0) {
     av_log(s, AV_LOG_ERROR, "Shared image truncate failed\n");
-    return -1;
+    return errno;
   }
 
   h->image_buffer_ptr = mmap(NULL, h->image_buffer_length, PROT_WRITE, MAP_SHARED, h->image_buffer_handle, 0);
@@ -123,7 +123,7 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt)
     av_log(s, AV_LOG_ERROR, "Map image file failed\n");
     close(h->image_buffer_handle);
     shm_unlink(filename);
-    return -1;
+    return errno;
   }
 
 #endif
@@ -199,7 +199,7 @@ AVOutputFormat ff_stream2shm_muxer = {
     .write_header   = write_header,
     .write_packet   = write_packet,
     .write_trailer  = write_trailer,
-    .flags          = AVFMT_TS_NONSTRICT,
+    .flags          = AVFMT_TS_NONSTRICT | AVFMT_NOFILE,
     .priv_class     = &stream2shm_muxer_class
 };
 #endif
