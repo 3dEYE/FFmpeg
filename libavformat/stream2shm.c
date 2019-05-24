@@ -131,8 +131,13 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt)
   if(h->sws_ctx != NULL)
    sws_freeContext(h->sws_ctx);
 
-  h->sws_ctx = sws_getContext(width, height, st->codecpar->format, width, height, AV_PIX_FMT_BGR24,
+  h->sws_ctx = sws_getContext(width, height, st->codecpar->format, width, height, AV_PIX_FMT_RGB24,
              SWS_FAST_BILINEAR, NULL, NULL, NULL);
+
+  if(h->sws_ctx == NULL) {
+    av_log(s, AV_LOG_ERROR, "Could not initialize the conversion context\n");
+    return -1;
+  }
 
   h->current_width = width;
   h->current_height = height;
