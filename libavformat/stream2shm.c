@@ -23,7 +23,7 @@ typedef struct CommandBufferData {
 typedef struct Stream2ShmData {
     const AVClass *class;
     int cmd_file_handle;
-    int image_buffer_handle;
+    int image_file_handle;
     char *cmd_buffer_ptr;
     char *image_buffer_ptr;
     int image_buffer_length;
@@ -39,21 +39,21 @@ static int write_header(AVFormatContext *s)
 #if defined(__linux__)
 
  h->image_buffer_ptr = MAP_FAILED;
- h->image_buffer_handle = -1;
+ h->image_file_handle = -1;
  h->cmd_file_handle = shm_open(s->url, O_RDWR, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
 
  if(h->cmd_file_handle == -1) {
    av_log(s, AV_LOG_ERROR, "Command file \"%s\" open failed\n", s->url);
-   return errno;
+   return -1;
  }
 
  h->cmd_buffer_ptr = mmap(NULL, COMMAND_BUFFER_LENGTH, PROT_READ | PROT_WRITE, MAP_SHARED, h->cmd_file_handle, 0);
 
  if(h->cmd_buffer_ptr == MAP_FAILED) {
-   av_log(s, AV_LOG_ERROR, "Map Command file failed\n");
+   av_log(s, AV_LOG_ERROR, "Map Command file \"%s\" failed\n", s->url);
    close(h->cmd_file_handle);
    shm_unlink(s->url);
-   return errno;
+   return -1;
  }
 
 #endif
@@ -86,7 +86,7 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt)
 
  width  = st->codecpar->width;
  height = st->codecpar->height;
- stride = width * 3;
+ stride = st->codecpar->width * 3;
 
  frame = (AVFrame *)pkt->data;
 
@@ -98,32 +98,32 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt)
   if(h->image_buffer_ptr != MAP_FAILED)
    munmap(h->image_buffer_ptr, h->image_buffer_length);
 
-  if(h->image_buffer_handle != -1 ) {
-   close(h->image_buffer_handle);
+  if(h->image_file_handle != -1 ) {
+   close(h->image_file_handle);
    shm_unlink(filename);
   }
 
-  h->image_buffer_handle = shm_open(filename, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
+  h->image_file_handle = shm_open(filename, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
 
-  if(h->image_buffer_handle == -1) {
+  if(h->image_file_handle == -1) {
     av_log(s, AV_LOG_ERROR, "Shared image file \"%s\" create failed\n", filename);
-    return errno;
+    return -1;
   }
 
   h->image_buffer_length = stride * height;
 
-  if(ftruncate(h->image_buffer_handle, h->image_buffer_length) != 0) {
-    av_log(s, AV_LOG_ERROR, "Shared image truncate failed\n");
-    return errno;
+  if(ftruncate(h->image_file_handle, h->image_buffer_length) != 0) {
+    av_log(s, AV_LOG_ERROR, "Shared image file \"%s\" truncate failed\n", filename);
+    return -1;
   }
 
-  h->image_buffer_ptr = mmap(NULL, h->image_buffer_length, PROT_WRITE, MAP_SHARED, h->image_buffer_handle, 0);
+  h->image_buffer_ptr = mmap(NULL, h->image_buffer_length, PROT_WRITE, MAP_SHARED, h->image_file_handle, 0);
 
   if(h->image_buffer_ptr == MAP_FAILED) {
-    av_log(s, AV_LOG_ERROR, "Map image file failed\n");
-    close(h->image_buffer_handle);
+    av_log(s, AV_LOG_ERROR, "Map image file \"%s\" failed\n", filename);
+    close(h->image_file_handle);
     shm_unlink(filename);
-    return errno;
+    return -1;
   }
 
 #endif
@@ -161,8 +161,8 @@ static int write_trailer(struct AVFormatContext *s)
  if(h->image_buffer_ptr != MAP_FAILED)
    munmap(h->image_buffer_ptr, h->image_buffer_length);
 
- if(h->image_buffer_handle != -1 ) {
-  close(h->image_buffer_handle);
+ if(h->image_file_handle != -1 ) {
+  close(h->image_file_handle);
   snprintf(filename, 512, "%s_img", s->url);
   shm_unlink(filename);
  }
