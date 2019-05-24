@@ -9,6 +9,7 @@
     #include <sys/mman.h>
 #endif
 
+#pragma pack(1)
 typedef struct CommandBufferData {
     int ready_flag;
     uint64_t timestamp;
