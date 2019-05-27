@@ -128,7 +128,7 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt)
   if(h->sws_ctx != NULL)
    sws_freeContext(h->sws_ctx);
 
-  h->sws_ctx = sws_getContext(width, height, st->codecpar->format, width, height, AV_PIX_FMT_RGB24,
+  h->sws_ctx = sws_getContext(width, height, st->codecpar->format, width, height, AV_PIX_FMT_BGR24,
              SWS_FAST_BILINEAR, NULL, NULL, NULL);
 
   if(h->sws_ctx == NULL) {
