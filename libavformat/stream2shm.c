@@ -119,7 +119,6 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt)
   if(h->image_buffer_ptr == MAP_FAILED) {
     av_log(s, AV_LOG_ERROR, "Map image file \"%s\" failed\n", filename);
     close(h->image_file_handle);
-    shm_unlink(filename);
     return -1;
   }
 
@@ -155,7 +154,6 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt)
 
 static int write_trailer(struct AVFormatContext *s)
 {
- char filename[512];
  Stream2ShmData *h = (Stream2ShmData *)s->priv_data;
 
 #if defined(__linux__)
@@ -163,11 +161,9 @@ static int write_trailer(struct AVFormatContext *s)
  if(h->image_buffer_ptr != MAP_FAILED)
    munmap(h->image_buffer_ptr, h->image_buffer_length);
 
- if(h->image_file_handle != -1 ) {
+ if(h->image_file_handle != -1 )
   close(h->image_file_handle);
-  snprintf(filename, 512, "%s_img", s->url);
- }
-
+ 
  if(h->cmd_buffer_ptr != MAP_FAILED)
   munmap(h->cmd_buffer_ptr, COMMAND_BUFFER_LENGTH);
 
