@@ -27,6 +27,7 @@
 #include "internal.h"
 #include "avio_internal.h"
 #include "dash.h"
+#include <unistd.h>
 
 #define INITIAL_BUFFER_SIZE 32768
 
@@ -1330,7 +1331,7 @@ static int64_t calc_cur_seg_no(AVFormatContext *s, struct representation *pls)
     DASHContext *c = s->priv_data;
     int64_t num = 0;
     int64_t start_time_offset = 0;
-	int64_t segment_start_time;
+    int64_t segment_start_time;
 
     if (c->is_live) {
         if (pls->n_fragments) {
@@ -1338,14 +1339,27 @@ static int64_t calc_cur_seg_no(AVFormatContext *s, struct representation *pls)
             num = pls->first_seq_no;
         } else if (pls->n_timelines) {
             av_log(s, AV_LOG_TRACE, "in n_timelines mode\n");
-            segment_start_time = get_segment_start_time_based_on_timeline(pls, 0xFFFFFFFF);
-            if(c->start_time)
-             start_time_offset = segment_start_time - (get_current_time_in_sec() - c->start_time) * pls->fragment_timescale;
-            else
-             start_time_offset = segment_start_time - 60 * pls->fragment_timescale; // 60 seconds before end
-            num = calc_next_seg_no_from_timelines(pls, start_time_offset);
+            if(c->start_time) {
+             num = -1;
+              if(c->start_time > c->availability_start_time) {
+               start_time_offset = (c->start_time - c->availability_start_time) * pls->fragment_timescale - pls->presentation_timeoffset;
+               for (int i = 0; i < pls->n_timelines; i++) {
+                if (pls->timelines[i]->starttime + pls->timelines[i]->duration > start_time_offset) {
+                   num = i;
+                   break;
+                 }
+               }
+              }
+              else 
+                num = 0;
+            }
+            else {
+              segment_start_time = get_segment_start_time_based_on_timeline(pls, 0xFFFFFFFF);
+              start_time_offset = segment_start_time - 60 * pls->fragment_timescale; // 60 seconds before end
+              num = calc_next_seg_no_from_timelines(pls, start_time_offset);
+            }
             if (num == -1)
-                num = c->start_time ? pls->last_seq_no : pls->first_seq_no;
+                num = c->start_time ? -1 : pls->first_seq_no;
             else
                 num += pls->first_seq_no;
         } else if (pls->fragment_duration){
@@ -1563,7 +1577,11 @@ static struct fragment *get_current_fragment(struct representation *pls)
         }
         if (pls->cur_seq_no <= min_seq_no) {
             av_log(pls->parent, AV_LOG_VERBOSE, "old fragment: cur[%"PRId64"] min[%"PRId64"] max[%"PRId64"], playlist %d\n", (int64_t)pls->cur_seq_no, min_seq_no, max_seq_no, (int)pls->rep_idx);
-            pls->cur_seq_no = calc_cur_seg_no(pls->parent, pls);
+            while((pls->cur_seq_no = calc_cur_seg_no(pls->parent, pls)) == -1)
+            {
+                sleep(c->minimum_update_period);
+                refresh_manifest(pls->parent);
+            }            
         } else if (pls->cur_seq_no > max_seq_no) {
             av_log(pls->parent, AV_LOG_VERBOSE, "new fragment: min[%"PRId64"] max[%"PRId64"], playlist %d\n", min_seq_no, max_seq_no, (int)pls->rep_idx);
         }
