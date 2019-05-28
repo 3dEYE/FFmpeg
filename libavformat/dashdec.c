@@ -1579,7 +1579,7 @@ static struct fragment *get_current_fragment(struct representation *pls)
             av_log(pls->parent, AV_LOG_VERBOSE, "old fragment: cur[%"PRId64"] min[%"PRId64"] max[%"PRId64"], playlist %d\n", (int64_t)pls->cur_seq_no, min_seq_no, max_seq_no, (int)pls->rep_idx);
             while((pls->cur_seq_no = calc_cur_seg_no(pls->parent, pls)) == -1)
             {
-                sleep(c->minimum_update_period);
+                sleep(1);
                 refresh_manifest(pls->parent);
             }            
         } else if (pls->cur_seq_no > max_seq_no) {

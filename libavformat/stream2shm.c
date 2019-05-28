@@ -25,9 +25,12 @@ typedef struct Stream2ShmData {
     const AVClass *class;
     int cmd_file_handle;
     int image_file_handle;
+    int gray_image_file_handle;
     char *cmd_buffer_ptr;
     char *image_buffer_ptr;
     int image_buffer_length;
+    char *gray_image_buffer_ptr;
+    int gray_image_buffer_length;
     int current_width;
     int current_height;
     struct SwsContext *sws_ctx;
@@ -40,7 +43,9 @@ static int write_header(AVFormatContext *s)
 #if defined(__linux__)
 
  h->image_buffer_ptr = MAP_FAILED;
+ h->gray_image_buffer_ptr = MAP_FAILED;
  h->image_file_handle = -1;
+ h->gray_image_file_handle = -1;
  h->cmd_file_handle = shm_open(s->url, O_RDWR, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
 
  if(h->cmd_file_handle == -1) {
@@ -76,6 +81,22 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt)
  if(st->codecpar->codec_type != AVMEDIA_TYPE_VIDEO)
   return 0;
 
+ switch (st->codecpar->format) {
+    case AV_PIX_FMT_GRAY8:
+    case AV_PIX_FMT_YUV411P:
+    case AV_PIX_FMT_YUV420P:
+    case AV_PIX_FMT_YUV422P:
+    case AV_PIX_FMT_YUV444P:
+    case AV_PIX_FMT_YUVJ420P:
+    case AV_PIX_FMT_YUVJ422P:
+    case AV_PIX_FMT_YUVJ444P:
+        break;
+    default:
+        av_log(s, AV_LOG_ERROR, "The pixel format '%s' is not supported.\n",
+               av_get_pix_fmt_name(st->codecpar->format));
+        return AVERROR(EINVAL);
+ }
+
  while(cbd->ready_flag) {
   
   if (ff_check_interrupt(&s->interrupt_callback))
@@ -91,15 +112,17 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt)
  frame = (AVFrame *)pkt->data;
 
  if(h->current_width != width || h->current_height != height) {
-  snprintf(filename, 512, "%s_img", s->url);
-
 #if defined(__linux__)
-
   if(h->image_buffer_ptr != MAP_FAILED)
    munmap(h->image_buffer_ptr, h->image_buffer_length);
 
+  if(h->gray_image_buffer_ptr != MAP_FAILED)
+   munmap(h->gray_image_buffer_ptr, h->gray_image_buffer_length);
+
+  snprintf(filename, 512, "%s_img", s->url);
+
   if(h->image_file_handle == -1 ) {
-    h->image_file_handle = shm_open(filename, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
+     h->image_file_handle = shm_open(filename, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
 
    if(h->image_file_handle == -1) {
      av_log(s, AV_LOG_ERROR, "Shared image file \"%s\" create failed\n", filename);
@@ -111,6 +134,8 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt)
 
   if(ftruncate(h->image_file_handle, h->image_buffer_length) != 0) {
     av_log(s, AV_LOG_ERROR, "Shared image file \"%s\" truncate failed\n", filename);
+    close(h->image_file_handle);
+    h->image_file_handle = -1;
     return -1;
   }
 
@@ -119,6 +144,36 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt)
   if(h->image_buffer_ptr == MAP_FAILED) {
     av_log(s, AV_LOG_ERROR, "Map image file \"%s\" failed\n", filename);
     close(h->image_file_handle);
+    h->image_file_handle = -1;
+    return -1;
+  }
+
+  snprintf(filename, 512, "%s_gray_img", s->url);
+
+  if(h->gray_image_file_handle == -1 ) {
+    h->gray_image_file_handle = shm_open(filename, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
+
+   if(h->gray_image_file_handle == -1) {
+     av_log(s, AV_LOG_ERROR, "Shared gray image file \"%s\" create failed\n", filename);
+     return -1;
+   }
+  }
+
+  h->gray_image_buffer_length = width * height;
+
+  if(ftruncate(h->gray_image_file_handle, h->gray_image_buffer_length) != 0) {
+    av_log(s, AV_LOG_ERROR, "Shared gray image file \"%s\" truncate failed\n", filename);
+    close(h->gray_image_file_handle);
+    h->gray_image_file_handle = -1;
+    return -1;
+  }
+
+  h->gray_image_buffer_ptr = mmap(NULL, h->gray_image_buffer_length, PROT_WRITE, MAP_SHARED, h->gray_image_file_handle, 0);
+
+  if(h->gray_image_buffer_ptr == MAP_FAILED) {
+    av_log(s, AV_LOG_ERROR, "Map gray image file \"%s\" failed\n", filename);
+    close(h->gray_image_file_handle);
+    h->gray_image_file_handle = -1;
     return -1;
   }
 
@@ -138,6 +193,8 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt)
   h->current_width = width;
   h->current_height = height;
  }
+
+ memcpy(h->gray_image_buffer_ptr, frame->data[0], h->gray_image_buffer_length);
 
  if(sws_scale(h->sws_ctx, (const uint8_t * const*)frame->data, frame->linesize, 0, height, (uint8_t **)&h->image_buffer_ptr, &stride) != height)
   return -1;
@@ -163,6 +220,12 @@ static int write_trailer(struct AVFormatContext *s)
 
  if(h->image_file_handle != -1 )
   close(h->image_file_handle);
+
+ if(h->gray_image_buffer_ptr != MAP_FAILED)
+   munmap(h->gray_image_buffer_ptr, h->gray_image_buffer_length);
+
+ if(h->gray_image_file_handle != -1 )
+  close(h->gray_image_file_handle);
  
  if(h->cmd_buffer_ptr != MAP_FAILED)
   munmap(h->cmd_buffer_ptr, COMMAND_BUFFER_LENGTH);
