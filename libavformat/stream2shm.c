@@ -34,6 +34,8 @@ typedef struct Stream2ShmData {
     int current_width;
     int current_height;
     struct SwsContext *sws_ctx;
+    int64_t previous_start_pts;
+    uint64_t cur_timestamp_base;
 } Stream2ShmData;
 
 static int write_header(AVFormatContext *s)
@@ -200,7 +202,15 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt)
   return -1;
 
  time_base = &s->streams[pkt->stream_index]->time_base;
- cbd->timestamp = *s->timestamp_base + pkt->pts * 1000 * time_base->num / time_base->den;
+
+ if(h->cur_timestamp_base != *s->timestamp_base) {
+    h->cur_timestamp_base = *s->timestamp_base;
+    h->previous_start_pts = pkt->pts;
+    cbd->timestamp = *s->timestamp_base;
+ }
+ else
+    cbd->timestamp = h->cur_timestamp_base + (pkt->pts - h->previous_start_pts) * 1000 * time_base->num / time_base->den;
+
  cbd->width = width;
  cbd->height = height;
  cbd->stride = stride;
