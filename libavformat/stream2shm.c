@@ -92,6 +92,8 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt)
     case AV_PIX_FMT_YUVJ420P:
     case AV_PIX_FMT_YUVJ422P:
     case AV_PIX_FMT_YUVJ444P:
+    case AV_PIX_FMT_NV12:
+    case AV_PIX_FMT_NV21:
         break;
     default:
         av_log(s, AV_LOG_ERROR, "The pixel format '%s' is not supported.\n",
