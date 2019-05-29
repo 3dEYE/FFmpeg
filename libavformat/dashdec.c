@@ -1546,6 +1546,7 @@ static struct fragment *get_current_fragment(struct representation *pls)
     struct fragment *seg = NULL;
     struct fragment *seg_ptr = NULL;
     DASHContext *c = pls->parent->priv_data;
+    int make_delay = 0;
 
     while (( !ff_check_interrupt(c->interrupt_callback)&& pls->n_fragments > 0)) {
         if (pls->cur_seq_no < pls->n_fragments) {
@@ -1563,7 +1564,11 @@ static struct fragment *get_current_fragment(struct representation *pls)
             seg->url_offset = seg_ptr->url_offset;
             return seg;
         } else if (c->is_live) {
+            if(make_delay)
+              sleep(1);
+
             refresh_manifest(pls->parent);
+            make_delay = 1;
         } else {
             break;
         }
