@@ -1547,6 +1547,7 @@ static struct fragment *get_current_fragment(struct representation *pls)
     struct fragment *seg_ptr = NULL;
     DASHContext *c = pls->parent->priv_data;
     int make_delay = 0;
+	int64_t currentTime;
 
     while (( !ff_check_interrupt(c->interrupt_callback)&& pls->n_fragments > 0)) {
         if (pls->cur_seq_no < pls->n_fragments) {
@@ -1562,6 +1563,8 @@ static struct fragment *get_current_fragment(struct representation *pls)
             }
             seg->size = seg_ptr->size;
             seg->url_offset = seg_ptr->url_offset;
+			currentTime = get_segment_start_time_based_on_timeline(pls, pls->cur_seq_no);
+			c->timestamp_base =  c->availability_start_time_ms + currentTime / pls->fragment_timescale * 1000;
             return seg;
         } else if (c->is_live) {
             if(make_delay)
@@ -1605,7 +1608,7 @@ static struct fragment *get_current_fragment(struct representation *pls)
         if (!tmpfilename) {
             return NULL;
         }
-        int64_t currentTime = get_segment_start_time_based_on_timeline(pls, pls->cur_seq_no);
+        currentTime = get_segment_start_time_based_on_timeline(pls, pls->cur_seq_no);
         c->timestamp_base =  c->availability_start_time_ms + currentTime / pls->fragment_timescale * 1000;
         ff_dash_fill_tmpl_params(tmpfilename, c->max_url_size, pls->url_template, 0, pls->cur_seq_no, 0, currentTime);
         seg->url = av_strireplace(pls->url_template, pls->url_template, tmpfilename);
