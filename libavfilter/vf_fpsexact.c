@@ -5,15 +5,16 @@
 
 typedef struct NullContext {
     const AVClass *class;
-    int frame_rate;
+    AVRational frame_rate;
     int64_t previous_pts;
 } FrameRateContext;
 
 #define OFFSET(x) offsetof(FrameRateContext, x)
-#define FLAGS AV_OPT_FLAG_FILTERING_PARAM|AV_OPT_FLAG_VIDEO_PARAM
+#define V AV_OPT_FLAG_VIDEO_PARAM
+#define F AV_OPT_FLAG_FILTERING_PARAM
 
 static const AVOption framerateexact_options[] = {
-    { "fps_exact", "set frame rate",  OFFSET(frame_rate), AV_OPT_TYPE_INT, {.i64=1}, 1, INT_MAX, FLAGS},
+    { "fps_exact", "set frame rate",  OFFSET(frame_rate), AV_OPT_TYPE_VIDEO_RATE, { .str = "25" }, 0, INT_MAX, V|F },
     { NULL },
 };
 
@@ -32,8 +33,8 @@ static int config_output_props(AVFilterLink *outlink)
 {
     AVFilterContext *ctx = outlink->src;
     FrameRateContext *frc = ctx->priv;
-    AVFilterLink *inlink = ctx->inputs[0];
 
+    outlink->time_base  = av_inv_q(frc->frame_rate);
     outlink->frame_rate = frc->frame_rate;
 
     return 0;
@@ -43,8 +44,8 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *ref)
 {
     FrameRateContext *frc = inlink->dst->priv;
 
-    if (previous_pts == -1 || (ref->pts - previous_pts) * 1000 * inlink->time_base->num / inlink->time_base->den >= 1000 / frc->frame_rate) {
-        previous_pts = ref->pts;
+    if (frc->previous_pts == -1 || (ref->pts - frc->previous_pts) * 1000 * inlink->time_base.num / inlink->time_base.den >= 1000 * frc->frame_rate.num / frc->frame_rate.den) {
+        frc->previous_pts = ref->pts;
         return ff_filter_frame(inlink->dst->outputs[0], ref);
     } else {
         av_frame_free(&ref);
