@@ -44,7 +44,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *ref)
 {
     FrameRateContext *frc = inlink->dst->priv;
 
-    if (frc->previous_pts == -1 || (ref->pts - frc->previous_pts) * 1000 * inlink->time_base.num / inlink->time_base.den >= 1000 * frc->frame_rate.num / frc->frame_rate.den) {
+    if (frc->previous_pts == -1 || (ref->pts - frc->previous_pts) * 1000 * inlink->time_base.num / inlink->time_base.den >= 1000 * frc->frame_rate.den / frc->frame_rate.num) {
         frc->previous_pts = ref->pts;
         return ff_filter_frame(inlink->dst->outputs[0], ref);
     } else {
