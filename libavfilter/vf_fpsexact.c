@@ -24,7 +24,7 @@ static av_cold int init(AVFilterContext *ctx)
 {
     FrameRateContext *frc = ctx->priv;
 
-    frc->previous_pts = -1;
+    frc->previous_pts = AV_NOPTS_VALUE;
     
     return 0;
 }
@@ -32,10 +32,10 @@ static av_cold int init(AVFilterContext *ctx)
 static int config_output_props(AVFilterLink *outlink)
 {
     AVFilterContext *ctx = outlink->src;
-    FrameRateContext *frc = ctx->priv;
+    AVFilterLink *inlink  = ctx->inputs[0];
 
-    outlink->time_base  = av_inv_q(frc->frame_rate);
-    outlink->frame_rate = frc->frame_rate;
+    outlink->time_base  = inlink->time_base;
+    outlink->frame_rate = inlink->frame_rate;
 
     return 0;
 }
@@ -44,7 +44,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *ref)
 {
     FrameRateContext *frc = inlink->dst->priv;
 
-    if (frc->previous_pts == -1 || (ref->pts - frc->previous_pts) * 1000 * inlink->time_base.num / inlink->time_base.den >= 1000 * frc->frame_rate.den / frc->frame_rate.num) {
+    if (frc->previous_pts == AV_NOPTS_VALUE || (ref->pts - frc->previous_pts) * inlink->time_base.num / inlink->time_base.den * 1000 >= 1000 * frc->frame_rate.den / frc->frame_rate.num) {
         frc->previous_pts = ref->pts;
         return ff_filter_frame(inlink->dst->outputs[0], ref);
     } else {
@@ -79,5 +79,4 @@ AVFilter ff_vf_framerateexact = {
     .init        = init,
     .inputs      = framerateexact_inputs,
     .outputs     = framerateexact_outputs,
-    .flags       = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC,
 };
