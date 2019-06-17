@@ -270,6 +270,9 @@ static int64_t get_segment_start_time_based_on_timeline(struct representation *p
     int64_t num = 0;
 
     if (pls->n_timelines) {
+        if(cur_seq_no < pls->n_timelines && pls->timelines[cur_seq_no]->starttime > 0)
+            return pls->timelines[cur_seq_no]->starttime;
+
         for (i = 0; i < pls->n_timelines; i++) {
             if (pls->timelines[i]->starttime > 0) {
                 start_time = pls->timelines[i]->starttime;
@@ -1563,8 +1566,8 @@ static struct fragment *get_current_fragment(struct representation *pls)
             }
             seg->size = seg_ptr->size;
             seg->url_offset = seg_ptr->url_offset;
-			currentTime = get_segment_start_time_based_on_timeline(pls, pls->cur_seq_no);
-			c->timestamp_base =  c->availability_start_time_ms + currentTime / pls->fragment_timescale * 1000;
+	    currentTime = get_segment_start_time_based_on_timeline(pls, pls->cur_seq_no);
+	    c->timestamp_base =  c->availability_start_time_ms + currentTime * 1000 / pls->fragment_timescale;
             return seg;
         } else if (c->is_live) {
             if(make_delay)
@@ -1608,8 +1611,8 @@ static struct fragment *get_current_fragment(struct representation *pls)
         if (!tmpfilename) {
             return NULL;
         }
-        currentTime = get_segment_start_time_based_on_timeline(pls, pls->cur_seq_no);
-        c->timestamp_base =  c->availability_start_time_ms + currentTime / pls->fragment_timescale * 1000;
+	currentTime = get_segment_start_time_based_on_timeline(pls, pls->cur_seq_no);
+	c->timestamp_base =  c->availability_start_time_ms + currentTime * 1000 / pls->fragment_timescale;
         ff_dash_fill_tmpl_params(tmpfilename, c->max_url_size, pls->url_template, 0, pls->cur_seq_no, 0, currentTime);
         seg->url = av_strireplace(pls->url_template, pls->url_template, tmpfilename);
         if (!seg->url) {
