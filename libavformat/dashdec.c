@@ -1362,7 +1362,7 @@ static int64_t calc_cur_seg_no(AVFormatContext *s, struct representation *pls)
               num = calc_next_seg_no_from_timelines(pls, start_time_offset);
             }
             if (num == -1)
-                num = c->start_time ? -1 : pls->first_seq_no;
+                num = c->start_time ? num : pls->first_seq_no;
             else
                 num += pls->first_seq_no;
         } else if (pls->fragment_duration){
@@ -1927,7 +1927,12 @@ static int open_demux_for_component(AVFormatContext *s, struct representation *p
     int i;
 
     pls->parent = s;
-    pls->cur_seq_no  = calc_cur_seg_no(s, pls);
+
+    while((pls->cur_seq_no = calc_cur_seg_no(s, pls)) == -1)
+    {
+       sleep(1);
+       refresh_manifest(s);
+    }
 
     if (!pls->last_seq_no) {
         pls->last_seq_no = calc_max_seg_no(pls, s->priv_data);
