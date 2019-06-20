@@ -1448,7 +1448,7 @@ static void move_segments(struct representation *rep_src, struct representation 
 }
 
 
-static int refresh_manifest(AVFormatContext *s)
+static int refresh_manifest(AVFormatContext *s, int64_t currentTime)
 {
 
     int ret = 0, i;
@@ -1487,10 +1487,8 @@ static int refresh_manifest(AVFormatContext *s)
         struct representation *cur_video = videos[i];
         struct representation *ccur_video = c->videos[i];
         if (cur_video->timelines) {
-            // calc current time
-            int64_t currentTime = get_segment_start_time_based_on_timeline(cur_video, cur_video->cur_seq_no) / cur_video->fragment_timescale;
             // update segments
-            ccur_video->cur_seq_no = calc_next_seg_no_from_timelines(ccur_video, currentTime * cur_video->fragment_timescale - 1, 0);
+            ccur_video->cur_seq_no = calc_next_seg_no_from_timelines(ccur_video, currentTime - 1, 0);
             if (ccur_video->cur_seq_no >= 0) {
                 move_timelines(ccur_video, cur_video, c);
             }
@@ -1503,10 +1501,8 @@ static int refresh_manifest(AVFormatContext *s)
         struct representation *cur_audio = audios[i];
         struct representation *ccur_audio = c->audios[i];
         if (cur_audio->timelines) {
-            // calc current time
-            int64_t currentTime = get_segment_start_time_based_on_timeline(cur_audio, cur_audio->cur_seq_no) / cur_audio->fragment_timescale;
             // update segments
-            ccur_audio->cur_seq_no = calc_next_seg_no_from_timelines(ccur_audio, currentTime * cur_audio->fragment_timescale - 1, 0);
+            ccur_audio->cur_seq_no = calc_next_seg_no_from_timelines(ccur_audio, currentTime - 1, 0);
             if (ccur_audio->cur_seq_no >= 0) {
                 move_timelines(ccur_audio, cur_audio, c);
             }
@@ -1558,7 +1554,7 @@ static struct fragment *get_current_fragment(struct representation *pls)
             seg->url_offset = seg_ptr->url_offset;
             return seg;
         } else if (c->is_live) {
-            if(refresh_manifest(pls->parent))
+            if(refresh_manifest(pls->parent, 0))
               return NULL;
         } else {
             break;
@@ -1571,18 +1567,18 @@ static struct fragment *get_current_fragment(struct representation *pls)
         if (pls->timelines && pls->cur_seq_no == pls->n_timelines || pls->fragments) {
             if(pls->timelines) {
                 int64_t last_start_time = pls->timelines[pls->n_timelines - 1]->starttime;
+                int64_t last_end_time = last_start_time + pls->timelines[pls->n_timelines - 1]->duration;
 
-                if(refresh_manifest(pls->parent))
+                if(refresh_manifest(pls->parent, last_end_time))
                    return NULL;
 
                 while(pls->timelines[pls->n_timelines - 1]->starttime == last_start_time) {
                    sleep(2);
-                   pls->cur_seq_no = pls->n_timelines;
-                   if(refresh_manifest(pls->parent))
+                   if(refresh_manifest(pls->parent, last_end_time))
                       return NULL;
                 }
             }
-            else if(refresh_manifest(pls->parent))
+            else if(refresh_manifest(pls->parent, 0))
              return NULL;
         }
         if (pls->cur_seq_no <= min_seq_no) {
