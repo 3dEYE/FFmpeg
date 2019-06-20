@@ -41,6 +41,9 @@ typedef struct Stream2ShmData {
 static int write_header(AVFormatContext *s)
 {
  Stream2ShmData *h = (Stream2ShmData *)s->priv_data;
+ 
+ if(s->timestamp_base == NULL)
+  return -1;
 
 #if defined(__linux__)
 
@@ -48,6 +51,7 @@ static int write_header(AVFormatContext *s)
  h->gray_image_buffer_ptr = MAP_FAILED;
  h->image_file_handle = -1;
  h->gray_image_file_handle = -1;
+
  h->cmd_file_handle = shm_open(s->url, O_RDWR, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
 
  if(h->cmd_file_handle == -1) {
@@ -64,6 +68,9 @@ static int write_header(AVFormatContext *s)
  }
 
 #endif
+
+ h->current_width = 0;
+ h->current_height = 0;
 
  return 0;
 }
@@ -123,10 +130,10 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt)
   if(h->gray_image_buffer_ptr != MAP_FAILED)
    munmap(h->gray_image_buffer_ptr, h->gray_image_buffer_length);
 
-  snprintf(filename, 512, "%s_img", s->url);
+  snprintf(filename, sizeof(filename), "%s_img", s->url);
 
   if(h->image_file_handle == -1 ) {
-     h->image_file_handle = shm_open(filename, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
+     h->image_file_handle = shm_open(filename, O_RDWR | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
 
    if(h->image_file_handle == -1) {
      av_log(s, AV_LOG_ERROR, "Shared image file \"%s\" create failed\n", filename);
@@ -152,10 +159,10 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt)
     return -1;
   }
 
-  snprintf(filename, 512, "%s_gray_img", s->url);
+  snprintf(filename, sizeof(filename), "%s_gray_img", s->url);
 
   if(h->gray_image_file_handle == -1 ) {
-    h->gray_image_file_handle = shm_open(filename, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
+    h->gray_image_file_handle = shm_open(filename, O_RDWR | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
 
    if(h->gray_image_file_handle == -1) {
      av_log(s, AV_LOG_ERROR, "Shared gray image file \"%s\" create failed\n", filename);
