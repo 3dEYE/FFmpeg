@@ -1541,7 +1541,7 @@ static struct fragment *get_current_fragment(struct representation *pls)
     struct fragment *seg_ptr = NULL;
     DASHContext *c = pls->parent->priv_data;
     int64_t currentTime;
- av_log(pls->parent, AV_LOG_ERROR, "cur_seq_no: %d", pls->n_fragments); 
+
     while (( !ff_check_interrupt(c->interrupt_callback)&& pls->n_fragments > 0)) {
         if (pls->cur_seq_no < pls->n_fragments) {
             seg_ptr = pls->fragments[pls->cur_seq_no];
