@@ -270,9 +270,6 @@ static int64_t get_segment_start_time_based_on_timeline(struct representation *p
     int64_t num = 0;
 
     if (pls->n_timelines) {
-        if(cur_seq_no < pls->n_timelines && pls->timelines[cur_seq_no]->starttime > 0)
-            return pls->timelines[cur_seq_no]->starttime;
-
         for (i = 0; i < pls->n_timelines; i++) {
             if (pls->timelines[i]->starttime > 0) {
                 start_time = pls->timelines[i]->starttime;
@@ -281,12 +278,6 @@ static int64_t get_segment_start_time_based_on_timeline(struct representation *p
                 goto finish;
 
             start_time += pls->timelines[i]->duration;
-
-            if (pls->timelines[i]->repeat == -1) {
-                start_time = pls->timelines[i]->duration * cur_seq_no;
-                goto finish;
-            }
-
             for (j = 0; j < pls->timelines[i]->repeat; j++) {
                 num++;
                 if (num == cur_seq_no)
@@ -299,6 +290,7 @@ static int64_t get_segment_start_time_based_on_timeline(struct representation *p
 finish:
     return start_time;
 }
+
 
 static int64_t calc_next_seg_no_from_timelines(struct representation *pls, int64_t cur_time)
 {
@@ -315,6 +307,10 @@ static int64_t calc_next_seg_no_from_timelines(struct representation *pls, int64
             goto finish;
 
         start_time += pls->timelines[i]->duration;
+
+        if (start_time > cur_time)
+            goto finish;
+
         for (j = 0; j < pls->timelines[i]->repeat; j++) {
             num++;
             if (start_time > cur_time)
@@ -1342,19 +1338,14 @@ static int64_t calc_cur_seg_no(AVFormatContext *s, struct representation *pls)
             num = pls->first_seq_no;
         } else if (pls->n_timelines) {
             av_log(s, AV_LOG_TRACE, "in n_timelines mode\n");
+
             if(c->start_time) {
-             num = -1;
               if(c->start_time > c->availability_start_time) {
-               start_time_offset = (c->start_time - c->availability_start_time) * pls->fragment_timescale - pls->presentation_timeoffset;
-               for (int i = 0; i < pls->n_timelines; i++) {
-                if (pls->timelines[i]->starttime + pls->timelines[i]->duration > start_time_offset) {
-                   num = i;
-                   break;
-                 }
-               }
+               start_time_offset = ((c->start_time - c->availability_start_time) * pls->fragment_timescale - pls->presentation_timeoffset);
+               num = calc_next_seg_no_from_timelines(pls, start_time_offset);
               }
               else 
-                num = 0;
+                num = pls->first_seq_no;
             }
             else {
               segment_start_time = get_segment_start_time_based_on_timeline(pls, 0xFFFFFFFF);
@@ -1362,7 +1353,7 @@ static int64_t calc_cur_seg_no(AVFormatContext *s, struct representation *pls)
               num = calc_next_seg_no_from_timelines(pls, start_time_offset);
             }
             if (num == -1)
-                num = c->start_time ? num : pls->first_seq_no;
+                num = c->start_time ? pls->n_timelines : pls->first_seq_no;
             else
                 num += pls->first_seq_no;
         } else if (pls->fragment_duration){
@@ -1549,9 +1540,8 @@ static struct fragment *get_current_fragment(struct representation *pls)
     struct fragment *seg = NULL;
     struct fragment *seg_ptr = NULL;
     DASHContext *c = pls->parent->priv_data;
-    int make_delay = 0;
-	int64_t currentTime;
-
+    int64_t currentTime;
+ av_log(pls->parent, AV_LOG_ERROR, "cur_seq_no: %d", pls->n_fragments); 
     while (( !ff_check_interrupt(c->interrupt_callback)&& pls->n_fragments > 0)) {
         if (pls->cur_seq_no < pls->n_fragments) {
             seg_ptr = pls->fragments[pls->cur_seq_no];
@@ -1566,15 +1556,9 @@ static struct fragment *get_current_fragment(struct representation *pls)
             }
             seg->size = seg_ptr->size;
             seg->url_offset = seg_ptr->url_offset;
-	    currentTime = get_segment_start_time_based_on_timeline(pls, pls->cur_seq_no);
-	    c->timestamp_base =  c->availability_start_time_ms + currentTime * 1000 / pls->fragment_timescale;
             return seg;
         } else if (c->is_live) {
-            if(make_delay)
-              sleep(1);
-
             refresh_manifest(pls->parent);
-            make_delay = 1;
         } else {
             break;
         }
@@ -1588,11 +1572,7 @@ static struct fragment *get_current_fragment(struct representation *pls)
         }
         if (pls->cur_seq_no <= min_seq_no) {
             av_log(pls->parent, AV_LOG_VERBOSE, "old fragment: cur[%"PRId64"] min[%"PRId64"] max[%"PRId64"], playlist %d\n", (int64_t)pls->cur_seq_no, min_seq_no, max_seq_no, (int)pls->rep_idx);
-            while((pls->cur_seq_no = calc_cur_seg_no(pls->parent, pls)) == -1)
-            {
-                sleep(1);
-                refresh_manifest(pls->parent);
-            }            
+            pls->cur_seq_no = calc_cur_seg_no(pls->parent, pls);
         } else if (pls->cur_seq_no > max_seq_no) {
             av_log(pls->parent, AV_LOG_VERBOSE, "new fragment: min[%"PRId64"] max[%"PRId64"], playlist %d\n", min_seq_no, max_seq_no, (int)pls->rep_idx);
         }
@@ -1611,8 +1591,8 @@ static struct fragment *get_current_fragment(struct representation *pls)
         if (!tmpfilename) {
             return NULL;
         }
-	currentTime = get_segment_start_time_based_on_timeline(pls, pls->cur_seq_no);
-	c->timestamp_base =  c->availability_start_time_ms + currentTime * 1000 / pls->fragment_timescale;
+        currentTime = get_segment_start_time_based_on_timeline(pls, pls->cur_seq_no);
+        c->timestamp_base =  c->availability_start_time_ms + currentTime * 1000 / pls->fragment_timescale;
         ff_dash_fill_tmpl_params(tmpfilename, c->max_url_size, pls->url_template, 0, pls->cur_seq_no, 0, currentTime);
         seg->url = av_strireplace(pls->url_template, pls->url_template, tmpfilename);
         if (!seg->url) {
@@ -1927,16 +1907,8 @@ static int open_demux_for_component(AVFormatContext *s, struct representation *p
     int i;
 
     pls->parent = s;
-
-    while((pls->cur_seq_no = calc_cur_seg_no(s, pls)) == -1)
-    {
-       sleep(1);
-       refresh_manifest(s);
-    }
-
-    if (!pls->last_seq_no) {
-        pls->last_seq_no = calc_max_seg_no(pls, s->priv_data);
-    }
+    pls->cur_seq_no  = calc_cur_seg_no(s, pls);
+    pls->last_seq_no = calc_max_seg_no(pls, s->priv_data);
 
     ret = reopen_demux_for_component(s, pls);
     if (ret < 0) {
