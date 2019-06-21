@@ -6,7 +6,9 @@
 typedef struct NullContext {
     const AVClass *class;
     AVRational frame_rate;
+    int frame_interval;
     int64_t previous_pts;
+    uint64_t delta_sum;
 } FrameRateContext;
 
 #define OFFSET(x) offsetof(FrameRateContext, x)
@@ -25,6 +27,8 @@ static av_cold int init(AVFilterContext *ctx)
     FrameRateContext *frc = ctx->priv;
 
     frc->previous_pts = AV_NOPTS_VALUE;
+    frc->delta_sum = 0;
+    frc->frame_interval = 1000 * frc->frame_rate.den / frc->frame_rate.num;
     
     return 0;
 }
@@ -44,10 +48,20 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *ref)
 {
     FrameRateContext *frc = inlink->dst->priv;
 
-    if (frc->previous_pts == AV_NOPTS_VALUE || (ref->pts - frc->previous_pts) * 1000 * inlink->time_base.num / inlink->time_base.den >= 1000 * frc->frame_rate.den / frc->frame_rate.num) {
+    if (frc->previous_pts == AV_NOPTS_VALUE) {
         frc->previous_pts = ref->pts;
         return ff_filter_frame(inlink->dst->outputs[0], ref);
     } else {
+        
+        frc->delta_sum += ref->pts - frc->previous_pts;
+        frc->previous_pts = ref->pts;
+              
+        if(frc->delta_sum * 1000 * inlink->time_base.num / inlink->time_base.den >= frc->frame_interval) {
+            frc->delta_sum = frc->delta_sum % frc->frame_interval;           
+
+            return ff_filter_frame(inlink->dst->outputs[0], ref);
+        }
+
         av_frame_free(&ref);
         return 0;
     }
