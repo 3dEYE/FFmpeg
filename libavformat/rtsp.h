@@ -413,6 +413,11 @@ typedef struct RTSPState {
      */
     char *public_ip;
 
+    /**
+     * Proxy info header to pass 3dEYE register code + local ip address
+     */
+    char *x_proxy_info;
+
     char default_lang[4];
     int buffer_size;
     

@@ -98,6 +98,7 @@ const AVOption ff_rtsp_options[] = {
     COMMON_OPTS(),
     { "user-agent", "override User-Agent header", OFFSET(user_agent), AV_OPT_TYPE_STRING, {.str = LIBAVFORMAT_IDENT}, 0, 0, DEC },
     { "public_ip", "override public IP for RTSP over UDP", OFFSET(public_ip), AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0, DEC },
+    { "x-proxy-info", "override x-proxy-info header", OFFSET(x_proxy_info), AV_OPT_TYPE_STRING, {.str = NULL}, 0, 0, DEC },
     { NULL },
 };
 
@@ -1312,6 +1313,9 @@ static int rtsp_send_cmd_with_content_async(AVFormatContext *s,
         av_strlcat(buf, headers, sizeof(buf));
     av_strlcatf(buf, sizeof(buf), "CSeq: %d\r\n", rt->seq);
     av_strlcatf(buf, sizeof(buf), "User-Agent: %s\r\n",  rt->user_agent);
+    if(rt->x_proxy_info)
+     av_strlcatf(buf, sizeof(buf), "X-Proxy-Info: %s\r\n",  rt->x_proxy_info);
+
     if (rt->session_id[0] != '\0' && (!headers ||
         !strstr(headers, "\nIf-Match:"))) {
         av_strlcatf(buf, sizeof(buf), "Session: %s\r\n", rt->session_id);
