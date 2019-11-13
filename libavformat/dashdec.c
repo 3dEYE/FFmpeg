@@ -303,17 +303,17 @@ static int64_t calc_next_seg_no_from_timelines(struct representation *pls, int64
         if (pls->timelines[i]->starttime > 0) {
             start_time = pls->timelines[i]->starttime;
         }
-        if (start_time > cur_time)
+        if (start_time >= cur_time)
             goto finish;
 
         start_time += pls->timelines[i]->duration;
 
-        if (soft_search && start_time > cur_time)
+        if (soft_search && start_time >= cur_time)
             goto finish;
 
         for (j = 0; j < pls->timelines[i]->repeat; j++) {
             num++;
-            if (start_time > cur_time)
+            if (start_time >= cur_time)
                 goto finish;
             start_time += pls->timelines[i]->duration;
         }
@@ -1488,7 +1488,7 @@ static int refresh_manifest(AVFormatContext *s, int64_t currentTime)
         struct representation *ccur_video = c->videos[i];
         if (cur_video->timelines) {
             // update segments
-            ccur_video->cur_seq_no = calc_next_seg_no_from_timelines(ccur_video, currentTime - 1, 0);
+            ccur_video->cur_seq_no = calc_next_seg_no_from_timelines(ccur_video, currentTime, 0);
             if (ccur_video->cur_seq_no >= 0) {
                 move_timelines(ccur_video, cur_video, c);
             }
@@ -1502,7 +1502,7 @@ static int refresh_manifest(AVFormatContext *s, int64_t currentTime)
         struct representation *ccur_audio = c->audios[i];
         if (cur_audio->timelines) {
             // update segments
-            ccur_audio->cur_seq_no = calc_next_seg_no_from_timelines(ccur_audio, currentTime - 1, 0);
+            ccur_audio->cur_seq_no = calc_next_seg_no_from_timelines(ccur_audio, currentTime, 0);
             if (ccur_audio->cur_seq_no >= 0) {
                 move_timelines(ccur_audio, cur_audio, c);
             }
@@ -1561,9 +1561,6 @@ static struct fragment *get_current_fragment(struct representation *pls)
         }
     }
     if (c->is_live) {
-        min_seq_no = calc_min_seg_no(pls->parent, pls);
-        max_seq_no = calc_max_seg_no(pls, c);
-
         if (pls->timelines && pls->cur_seq_no == pls->n_timelines || pls->fragments) {
             if(pls->timelines) {
                 int64_t last_start_time = pls->timelines[pls->n_timelines - 1]->starttime;
@@ -1581,6 +1578,10 @@ static struct fragment *get_current_fragment(struct representation *pls)
             else if(refresh_manifest(pls->parent, 0))
              return NULL;
         }
+		
+		min_seq_no = calc_min_seg_no(pls->parent, pls);
+        max_seq_no = calc_max_seg_no(pls, c);
+
         if (pls->cur_seq_no <= min_seq_no) {
             av_log(pls->parent, AV_LOG_VERBOSE, "old fragment: cur[%"PRId64"] min[%"PRId64"] max[%"PRId64"], playlist %d\n", (int64_t)pls->cur_seq_no, min_seq_no, max_seq_no, (int)pls->rep_idx);
             pls->cur_seq_no = calc_cur_seg_no(pls->parent, pls);
