@@ -2023,7 +2023,7 @@ static int recheck_discard_flags(AVFormatContext *s, int first)
             changed = 1;
             pls->cur_seq_no = select_cur_seq_no(c, pls);
             pls->pb.eof_reached = 0;
-            c->first_segment_pts = c->last_pts;
+            c->first_segment_pts = 0;
             if (c->cur_timestamp != AV_NOPTS_VALUE) {
                 /* catch up */
                 pls->seek_timestamp = c->cur_timestamp;
@@ -2213,9 +2213,14 @@ static int hls_read_packet(AVFormatContext *s, AVPacket *pkt)
             pkt->pts = 0;
             c->first_segment_pts = pls->pkt.pts;
          }
+        else if (c->first_segment_pts == 0) {
+           c->first_segment_pts = pls->pkt.pts;
+           pkt->pts = av_rescale_q((current_segment(pls)->timestamp - c->timestamp_base) * 1000, AV_TIME_BASE_Q,
+                                    ist->time_base);
+        }
         else
            pkt->pts = pls->pkt.pts - c->first_segment_pts + av_rescale_q((current_segment(pls)->timestamp - c->timestamp_base) * 1000, AV_TIME_BASE_Q,
-                                            ist->time_base);
+                                     ist->time_base);
         c->last_pts = pls->pkt.pts;
 
         pkt->stream_index = st->index;
