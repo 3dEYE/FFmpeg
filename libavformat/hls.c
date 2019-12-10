@@ -1648,7 +1648,7 @@ static int select_cur_seq_no(HLSContext *c, struct playlist *pls)
          if(c->start_time > 0) {
              for (int i = pls->n_segments - 1; i > -1; i--) 
                  if(pls->segments[i]->timestamp <= c->start_time)
-                      return i;
+                      return pls->start_seq_no + i;
           }
         
           /* If this is a live stream, start live_start_index segments from the
