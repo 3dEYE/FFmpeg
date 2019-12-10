@@ -75,7 +75,7 @@ struct segment {
     uint8_t iv[16];
     /* associated Media Initialization Section, treated as a segment */
     struct segment *init_section;
-	int64_t timestamp;
+    int64_t timestamp;
 };
 
 struct rendition;
@@ -211,7 +211,9 @@ typedef struct HLSContext {
     int http_multiple;
     AVIOContext *playlist_pb;
     int64_t start_time;
-    uint64_t timestamp_base;	
+    int64_t last_pts;
+    int64_t timestamp_base;
+    int64_t first_segment_pts;
 } HLSContext;
 
 static void free_segment_dynarray(struct segment **segments, int n_segments)
@@ -895,13 +897,15 @@ static int parse_playlist(HLSContext *c, const char *url,
                 char *dashPos = strrchr(line, '-');
                 char *dotPos = strrchr(line, '.');
 
-                if(dashPos != NULL && dotPos != NULL) {
-                  char *timestampPos = dashPos + 1;
+                if(dotPos != NULL) {
+                  char *timestampPos = dashPos != NULL ? dashPos + 1 : line;
                   *dotPos = '\0';
-                  seg->timestamp = atoi(timestampPos);
+                  seg->timestamp = strtoll(timestampPos, NULL, 0);
                   *dotPos = '.';
                 }
-                
+                else
+                  seg->timestamp = 0;
+
                 ff_make_absolute_url(tmp_str, sizeof(tmp_str), url, line);
                 seg->url = av_strdup(tmp_str);
                 if (!seg->url) {
@@ -1630,29 +1634,28 @@ static int select_cur_seq_no(HLSContext *c, struct playlist *pls)
         if (!c->first_packet) { /* we are doing a segment selection during playback */
             while(!(c->cur_seq_no >= pls->start_seq_no &&
             c->cur_seq_no < pls->start_seq_no + pls->n_segments)) {
-				parse_playlist(c, pls->url, pls, NULL));
+				parse_playlist(c, pls->url, pls, NULL);
 				av_usleep(2000*1000);
-			}
+	    }
             /* While spec 3.4.3 says that we cannot assume anything about the
              * content at the same sequence number on different playlists,
              * in practice this seems to work and doing it otherwise would
              * require us to download a segment to inspect its timestamps. */
             return c->cur_seq_no;
-		}
-		
-        if(c->start_time > 0) {
-             for (int i = pls->n_segments - 1; i > -1; i--) {
-                 if(pls->segments[i]->timestamp < c->start_time)
-                      return i;
-        }
-    
-		}
+	}
         else {
-        /* If this is a live stream, start live_start_index segments from the
-         * start or end */
-        if (c->live_start_index < 0)
+
+         if(c->start_time > 0) {
+             for (int i = pls->n_segments - 1; i > -1; i--) 
+                 if(pls->segments[i]->timestamp <= c->start_time)
+                      return i;
+          }
+        
+          /* If this is a live stream, start live_start_index segments from the
+           * start or end */
+          if (c->live_start_index < 0)
             return pls->start_seq_no + FFMAX(pls->n_segments + c->live_start_index, 0);
-        else
+          else
             return pls->start_seq_no + FFMIN(c->live_start_index, pls->n_segments - 1);
         }
     }
@@ -1758,6 +1761,8 @@ static int update_streams_from_subdemuxer(AVFormatContext *s, struct playlist *p
         err = set_stream_info_from_input_stream(st, pls, ist);
         if (err < 0)
             return err;
+
+        st->start_time = 0;
     }
 
     return 0;
@@ -1812,6 +1817,8 @@ static int hls_read_header(AVFormatContext *s)
     c->first_timestamp = AV_NOPTS_VALUE;
     c->cur_timestamp = AV_NOPTS_VALUE;
     c->timestamp_base = AV_NOPTS_VALUE;
+    c->last_pts = 0;
+    c->first_segment_pts = 0;
     s->timestamp_base = &c->timestamp_base;
 	
     if ((ret = save_avio_options(s)) < 0)
@@ -2016,6 +2023,7 @@ static int recheck_discard_flags(AVFormatContext *s, int first)
             changed = 1;
             pls->cur_seq_no = select_cur_seq_no(c, pls);
             pls->pb.eof_reached = 0;
+            c->first_segment_pts = c->last_pts;
             if (c->cur_timestamp != AV_NOPTS_VALUE) {
                 /* catch up */
                 pls->seek_timestamp = c->cur_timestamp;
@@ -2199,6 +2207,17 @@ static int hls_read_packet(AVFormatContext *s, AVPacket *pkt)
         st = pls->main_streams[pls->pkt.stream_index];
 
         *pkt = pls->pkt;
+
+         if(c->timestamp_base == AV_NOPTS_VALUE) {
+            c->timestamp_base = current_segment(pls)->timestamp;
+            pkt->pts = 0;
+            c->first_segment_pts = pls->pkt.pts;
+         }
+        else
+           pkt->pts = pls->pkt.pts - c->first_segment_pts + av_rescale_q((current_segment(pls)->timestamp - c->timestamp_base) * 1000, AV_TIME_BASE_Q,
+                                            ist->time_base);
+        c->last_pts = pls->pkt.pts;
+
         pkt->stream_index = st->index;
         reset_packet(&c->playlists[minplaylist]->pkt);
 
@@ -2206,10 +2225,7 @@ static int hls_read_packet(AVFormatContext *s, AVPacket *pkt)
             c->cur_timestamp = av_rescale_q(pkt->dts,
                                             ist->time_base,
                                             AV_TIME_BASE_Q);
-											
-			if(c->timestamp_base == AV_NOPTS_VALUE)
-              c->timestamp_base = c->cur_timestamp;
-		}
+	}
         /* There may be more situations where this would be useful, but this at least
          * handles newly probed codecs properly (i.e. request_probe by mpegts). */
         if (ist->codecpar->codec_id != st->codecpar->codec_id) {
