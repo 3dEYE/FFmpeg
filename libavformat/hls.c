@@ -214,6 +214,7 @@ typedef struct HLSContext {
     int64_t last_pts;
     int64_t timestamp_base;
     int64_t first_segment_pts;
+    int64_t first_segment_timestamp;
 } HLSContext;
 
 static void free_segment_dynarray(struct segment **segments, int n_segments)
@@ -1819,6 +1820,7 @@ static int hls_read_header(AVFormatContext *s)
     c->timestamp_base = AV_NOPTS_VALUE;
     c->last_pts = 0;
     c->first_segment_pts = 0;
+    c->first_segment_timestamp = 0;
     s->timestamp_base = &c->timestamp_base;
 	
     if ((ret = save_avio_options(s)) < 0)
@@ -2024,6 +2026,7 @@ static int recheck_discard_flags(AVFormatContext *s, int first)
             pls->cur_seq_no = select_cur_seq_no(c, pls);
             pls->pb.eof_reached = 0;
             c->first_segment_pts = 0;
+            c->first_segment_timestamp = 0;
             if (c->cur_timestamp != AV_NOPTS_VALUE) {
                 /* catch up */
                 pls->seek_timestamp = c->cur_timestamp;
@@ -2210,17 +2213,19 @@ static int hls_read_packet(AVFormatContext *s, AVPacket *pkt)
 
          if(c->timestamp_base == AV_NOPTS_VALUE) {
             c->timestamp_base = current_segment(pls)->timestamp;
+            c->first_segment_timestamp = c->timestamp_base;
             pkt->pts = 0;
             c->first_segment_pts = pls->pkt.pts;
          }
         else if (c->first_segment_pts == 0) {
-           c->first_segment_pts = pls->pkt.pts;
-           pkt->pts = av_rescale_q((current_segment(pls)->timestamp - c->timestamp_base) * 1000, AV_TIME_BASE_Q,
+           c->first_segment_timestamp = av_rescale_q((current_segment(pls)->timestamp - c->timestamp_base) * 1000, AV_TIME_BASE_Q,
                                     ist->time_base);
+           pkt->pts = c->first_segment_timestamp;
+           c->first_segment_pts = pls->pkt.pts;
         }
         else
-           pkt->pts = pls->pkt.pts - c->first_segment_pts + av_rescale_q((current_segment(pls)->timestamp - c->timestamp_base) * 1000, AV_TIME_BASE_Q,
-                                     ist->time_base);
+           pkt->pts = c->first_segment_timestamp + pls->pkt.pts - c->first_segment_pts;
+        
         c->last_pts = pls->pkt.pts;
 
         pkt->stream_index = st->index;
