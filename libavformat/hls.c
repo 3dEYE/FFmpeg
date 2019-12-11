@@ -2213,7 +2213,7 @@ static int hls_read_packet(AVFormatContext *s, AVPacket *pkt)
 
          if(c->timestamp_base == AV_NOPTS_VALUE) {
             c->timestamp_base = current_segment(pls)->timestamp;
-            c->first_segment_timestamp = c->timestamp_base;
+            c->first_segment_timestamp = 0;
             pkt->pts = 0;
             c->first_segment_pts = pls->pkt.pts;
          }
