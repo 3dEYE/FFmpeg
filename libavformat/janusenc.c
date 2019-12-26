@@ -126,7 +126,7 @@ static char *read_json_value(const char *str, const char *field, char *value_buf
   while(*field_end_pos != ',' &&
         *field_end_pos != '\"' &&
         *field_end_pos != '\r' &&
-         *field_end_pos != '\n' &&
+        *field_end_pos != '\n' &&
         *field_end_pos != '}')
   {
     if(*field_start_pos == '\0')
@@ -842,14 +842,14 @@ static int create_janus_mountpoint(AVFormatContext *s, const char *admin_key, co
    const char *destroy_mountpoint_request_template = "{\"janus\":\"message\",\"transaction\":\"cxJRyhtB1lo0\",\"body\":{\"request\":\"destroy\",\"id\":%s,\"secret\":\"3DEYE_KEY_!\"}}";
    const char *trueString = "true";
    const char *falseString = "false";
-   char janus_response[1024];
-   char session_buffer[256];
-   char plugin_id_buffer[256];
-   char path_buffer[256];
-   char video_rtp_map_buffer[256];
-   char audio_rtp_map_buffer[256];
-   char video_rtp_format_buffer[256];
-   char audio_rtp_format_buffer[256];
+   char janus_response[2048];
+   char session_buffer[512];
+   char plugin_id_buffer[512];
+   char path_buffer[512];
+   char video_rtp_map_buffer[512];
+   char audio_rtp_map_buffer[512];
+   char video_rtp_format_buffer[512];
+   char audio_rtp_format_buffer[512];
    char admin_key_buffer[512];
    char pin_buffer[512];
    char buffer[4096];
