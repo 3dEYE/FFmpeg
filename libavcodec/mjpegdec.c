@@ -668,7 +668,9 @@ unk_pixfmt:
     }
 
     if ((s->rgb && !s->lossless && !s->ls) ||
-        (!s->rgb && s->ls && s->nb_components > 1)) {
+        (!s->rgb && s->ls && s->nb_components > 1) ||
+        (s->avctx->pix_fmt == AV_PIX_FMT_PAL8 && !s->ls)
+    ) {
         av_log(s->avctx, AV_LOG_ERROR, "Unsupported coding and pixel format combination\n");
         return AVERROR_PATCHWELCOME;
     }
@@ -1157,25 +1159,25 @@ static int ljpeg_decode_yuv_scan(MJpegDecodeContext *s, int predictor,
                             || v * mb_y + y >= s->height) {
                             // Nothing to do
                         } else if (bits<=8) {
-                        ptr = s->picture_ptr->data[c] + (linesize * (v * mb_y + y)) + (h * mb_x + x); //FIXME optimize this crap
-                        if(y==0 && toprow){
-                            if(x==0 && leftcol){
-                                pred= 1 << (bits - 1);
+                            ptr = s->picture_ptr->data[c] + (linesize * (v * mb_y + y)) + (h * mb_x + x); //FIXME optimize this crap
+                            if(y==0 && toprow){
+                                if(x==0 && leftcol){
+                                    pred= 1 << (bits - 1);
+                                }else{
+                                    pred= ptr[-1];
+                                }
                             }else{
-                                pred= ptr[-1];
+                                if(x==0 && leftcol){
+                                    pred= ptr[-linesize];
+                                }else{
+                                    PREDICT(pred, ptr[-linesize-1], ptr[-linesize], ptr[-1], predictor);
+                                }
                             }
-                        }else{
-                            if(x==0 && leftcol){
-                                pred= ptr[-linesize];
-                            }else{
-                                PREDICT(pred, ptr[-linesize-1], ptr[-linesize], ptr[-1], predictor);
-                            }
-                        }
 
-                        if (s->interlaced && s->bottom_field)
-                            ptr += linesize >> 1;
-                        pred &= mask;
-                        *ptr= pred + ((unsigned)dc << point_transform);
+                            if (s->interlaced && s->bottom_field)
+                                ptr += linesize >> 1;
+                            pred &= mask;
+                            *ptr= pred + ((unsigned)dc << point_transform);
                         }else{
                             ptr16 = (uint16_t*)(s->picture_ptr->data[c] + 2*(linesize * (v * mb_y + y)) + 2*(h * mb_x + x)); //FIXME optimize this crap
                             if(y==0 && toprow){
