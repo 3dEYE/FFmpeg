@@ -90,7 +90,7 @@ static int interrupt_cb(void *ctx)
 
 static char *read_json_value(const char *str, const char *field, char *value_buffer, int value_buffer_size)
 {
-  char buf[128];
+  char buf[1024];
   char *field_start_pos;
   char *field_end_pos;
   int length;
