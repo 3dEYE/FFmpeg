@@ -1298,7 +1298,6 @@ static int janus_write_close(AVFormatContext *s)
 
     js->janus_thread_terminated = 1;
     pthread_join(js->janus_thread, NULL);
-    pthread_detach(js->janus_thread);
     av_free(js->extradata_copy);
 
     if(js->video_rtpctx != NULL)
