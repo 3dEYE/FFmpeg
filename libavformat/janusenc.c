@@ -44,6 +44,7 @@
 #define MAX_EXTRADATA_SIZE ((INT_MAX - 10) / 2)
 
 typedef struct JanusState {
+  const AVClass *class; /**< Class for private options. */
   AVFormatContext *video_rtpctx;
   AVFormatContext *audio_rtpctx;
   int video_stream_index;
