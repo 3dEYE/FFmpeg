@@ -354,7 +354,7 @@ static char *extradata2psets(AVFormatContext *s, AVCodecParameters *par)
     uint8_t *extradata = par->extradata;
     int extradata_size = par->extradata_size;
     uint8_t *tmpbuf = NULL;
-    const uint8_t *sps = NULL, *sps_end;
+    const uint8_t *sps = NULL;
 
     if (par->extradata_size > MAX_EXTRADATA_SIZE) {
         av_log(s, AV_LOG_ERROR, "Too much extradata!\n");
@@ -396,7 +396,6 @@ static char *extradata2psets(AVFormatContext *s, AVCodecParameters *par)
         }
         if (!sps) {
             sps = r;
-            sps_end = r1;
         }
         if (!av_base64_encode(p, MAX_PSET_SIZE - (p - psets), r, r1 - r)) {
             av_log(s, AV_LOG_ERROR, "Cannot Base64-encode %"PTRDIFF_SPECIFIER" %"PTRDIFF_SPECIFIER"!\n", MAX_PSET_SIZE - (p - psets), r1 - r);
