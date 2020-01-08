@@ -1260,19 +1260,11 @@ static int janus_write_packet(AVFormatContext *s, AVPacket *pkt)
 
          if(js->extradata_size > 0 && pkt->size > 4 && (pkt->data[4] & 0x1F) != 7)
          {
-           local_pkt = *pkt;
-           local_pkt.data = js->extradata;
-           local_pkt.size = js->extradata_size;
-           local_pkt.stream_index = js->video_stream_index;
+           if(av_grow_packet(pkt, js->extradata_size))
+             return ret;
 
-           ret = ff_write_chained(rtpctx, 0, &local_pkt, s, 0);
-
-           pkt->buf = local_pkt.buf;
-           pkt->side_data       = local_pkt.side_data;
-           pkt->side_data_elems = local_pkt.side_data_elems;
-
-            if(ret)
-              return ret;
+           memmove(pkt->data + js->extradata_size, pkt->data, pkt->size);
+           memcpy(pkt->data, js->extradata, js->extradata_size);
          }
        }
        
