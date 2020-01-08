@@ -1194,7 +1194,6 @@ static int janus_write_packet(AVFormatContext *s, AVPacket *pkt)
     JanusState *js = s->priv_data;
     AVFormatContext *rtpctx;
     URLContext *urlctx;
-    AVPacket local_pkt;
     int ret;
 
     if (pkt->stream_index < 0)
