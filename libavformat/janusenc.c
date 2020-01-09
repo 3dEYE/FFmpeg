@@ -351,22 +351,21 @@ static char *extradata2psets(AVFormatContext *s, AVCodecParameters *par)
     char *psets, *p;
     const uint8_t *r;
     static const char pset_string[] = "; sprop-parameter-sets=";
+    static const char profile_string[] = "; profile-level-id=";
     uint8_t *extradata = par->extradata;
     int extradata_size = par->extradata_size;
     uint8_t *tmpbuf = NULL;
-    const uint8_t *sps = NULL;
+    const uint8_t *sps = NULL, *sps_end;
 
     if (par->extradata_size > MAX_EXTRADATA_SIZE) {
         av_log(s, AV_LOG_ERROR, "Too much extradata!\n");
 
         return NULL;
     }
-
     if (par->extradata[0] == 1) {
         if (ff_avc_write_annexb_extradata(par->extradata, &extradata,
                                           &extradata_size))
             return NULL;
-
         tmpbuf = extradata;
     }
 
@@ -396,6 +395,7 @@ static char *extradata2psets(AVFormatContext *s, AVCodecParameters *par)
         }
         if (!sps) {
             sps = r;
+            sps_end = r1;
         }
         if (!av_base64_encode(p, MAX_PSET_SIZE - (p - psets), r, r1 - r)) {
             av_log(s, AV_LOG_ERROR, "Cannot Base64-encode %"PTRDIFF_SPECIFIER" %"PTRDIFF_SPECIFIER"!\n", MAX_PSET_SIZE - (p - psets), r1 - r);
@@ -407,8 +407,19 @@ static char *extradata2psets(AVFormatContext *s, AVCodecParameters *par)
         p += strlen(p);
         r = r1;
     }
-
+    if (sps && sps_end - sps >= 4) {
+        memcpy(p, profile_string, strlen(profile_string));
+        p += strlen(p);
+        char sps_fixed[3];
+        //hack to avoid problems with firefox
+        sps_fixed[0]=0x42;
+        sps_fixed[1]=0xe0;
+        sps_fixed[2]=sps[3];
+        ff_data_to_hex(p, sps_fixed, 3, 0);
+        p[6] = '\0';
+    }
     av_free(tmpbuf);
+
     return psets;
 }
 
