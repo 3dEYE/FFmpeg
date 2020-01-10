@@ -1272,7 +1272,7 @@ static int janus_write_packet(AVFormatContext *s, AVPacket *pkt)
            if(av_grow_packet(pkt, js->extradata_size))
              return ret;
 
-           memmove(pkt->data + js->extradata_size, pkt->data, pkt->size);
+           memmove(pkt->data + js->extradata_size, pkt->data, pkt->size - js->extradata_size);
            memcpy(pkt->data, js->extradata, js->extradata_size);
          }
        }
