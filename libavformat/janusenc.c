@@ -351,6 +351,7 @@ static char *extradata2psets(AVFormatContext *s, AVCodecParameters *par)
     char *psets, *p;
     const uint8_t *r;
     static const char pset_string[] = "; sprop-parameter-sets=";
+    static const char profile_string[] = "; profile-level-id=";
     uint8_t *extradata = par->extradata;
     int extradata_size = par->extradata_size;
     uint8_t *tmpbuf = NULL;
@@ -361,12 +362,10 @@ static char *extradata2psets(AVFormatContext *s, AVCodecParameters *par)
 
         return NULL;
     }
-
     if (par->extradata[0] == 1) {
         if (ff_avc_write_annexb_extradata(par->extradata, &extradata,
                                           &extradata_size))
             return NULL;
-
         tmpbuf = extradata;
     }
 
@@ -408,8 +407,19 @@ static char *extradata2psets(AVFormatContext *s, AVCodecParameters *par)
         p += strlen(p);
         r = r1;
     }
-
+    if (sps && sps_end - sps >= 4) {
+        memcpy(p, profile_string, strlen(profile_string));
+        p += strlen(p);
+        char sps_fixed[3];
+        //hack to avoid problems with firefox
+        sps_fixed[0]=0x42;
+        sps_fixed[1]=0xe0;
+        sps_fixed[2]=sps[3];
+        ff_data_to_hex(p, sps_fixed, 3, 0);
+        p[6] = '\0';
+    }
     av_free(tmpbuf);
+
     return psets;
 }
 
@@ -1194,7 +1204,6 @@ static int janus_write_packet(AVFormatContext *s, AVPacket *pkt)
     JanusState *js = s->priv_data;
     AVFormatContext *rtpctx;
     URLContext *urlctx;
-    AVPacket local_pkt;
     int ret;
 
     if (pkt->stream_index < 0)
@@ -1260,19 +1269,11 @@ static int janus_write_packet(AVFormatContext *s, AVPacket *pkt)
 
          if(js->extradata_size > 0 && pkt->size > 4 && (pkt->data[4] & 0x1F) != 7)
          {
-           local_pkt = *pkt;
-           local_pkt.data = js->extradata;
-           local_pkt.size = js->extradata_size;
-           local_pkt.stream_index = js->video_stream_index;
+           if(av_grow_packet(pkt, js->extradata_size))
+             return ret;
 
-           ret = ff_write_chained(rtpctx, 0, &local_pkt, s, 0);
-
-           pkt->buf = local_pkt.buf;
-           pkt->side_data       = local_pkt.side_data;
-           pkt->side_data_elems = local_pkt.side_data_elems;
-
-            if(ret)
-              return ret;
+           memmove(pkt->data + js->extradata_size, pkt->data, pkt->size - js->extradata_size);
+           memcpy(pkt->data, js->extradata, js->extradata_size);
          }
        }
        
