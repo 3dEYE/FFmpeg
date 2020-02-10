@@ -74,6 +74,7 @@ struct segment {
     uint8_t iv[16];
     /* associated Media Initialization Section, treated as a segment */
     struct segment *init_section;
+    int64_t timestamp;
 };
 
 struct rendition;
@@ -206,6 +207,7 @@ typedef struct HLSContext {
     int strict_std_compliance;
     char *allowed_extensions;
     int max_reload;
+    int64_t start_time;
 } HLSContext;
 
 static int read_chomp_line(AVIOContext *s, char *buf, int maxlen)
@@ -831,6 +833,18 @@ static int parse_playlist(HLSContext *c, const char *url,
                 } else {
                     seg->key = NULL;
                 }
+
+                char *dashPos = strrchr(line, '-');
+                char *dotPos = strrchr(line, '.');
+
+                if(dotPos != NULL) {
+                  char *timestampPos = dashPos != NULL ? dashPos + 1 : line;
+                  *dotPos = '\0';
+                  seg->timestamp = strtoll(timestampPos, NULL, 0);
+                  *dotPos = '.';
+                }
+                else
+                  seg->timestamp = 0;
 
                 ff_make_absolute_url(tmp_str, sizeof(tmp_str), url, line);
                 seg->url = av_strdup(tmp_str);
@@ -1474,21 +1488,29 @@ static int select_cur_seq_no(HLSContext *c, struct playlist *pls)
     }
 
     if (!pls->finished) {
-        if (!c->first_packet && /* we are doing a segment selection during playback */
-            c->cur_seq_no >= pls->start_seq_no &&
-            c->cur_seq_no < pls->start_seq_no + pls->n_segments)
-            /* While spec 3.4.3 says that we cannot assume anything about the
-             * content at the same sequence number on different playlists,
-             * in practice this seems to work and doing it otherwise would
-             * require us to download a segment to inspect its timestamps. */
-            return c->cur_seq_no;
+        if (!c->first_packet) {
+            while(!(c->cur_seq_no >= pls->start_seq_no &&
+            c->cur_seq_no < pls->start_seq_no + pls->n_segments)) {
+				parse_playlist(c, pls->url, pls, NULL);
+				av_usleep(2000*1000);
+            }
+        }
+        else {
+        if(c->start_time > 0) {
+             for (int i = pls->n_segments - 1; i > -1; i--) 
+                 if(pls->segments[i]->timestamp <= c->start_time)
+                     return pls->start_seq_no + i;
 
+        }
+        else {
         /* If this is a live stream, start live_start_index segments from the
          * start or end */
         if (c->live_start_index < 0)
             return pls->start_seq_no + FFMAX(pls->n_segments + c->live_start_index, 0);
         else
             return pls->start_seq_no + FFMIN(c->live_start_index, pls->n_segments - 1);
+        }
+       }
     }
 
     /* Otherwise just start on the first segment. */
@@ -2157,6 +2179,7 @@ static const AVOption hls_options[] = {
         INT_MIN, INT_MAX, FLAGS},
     {"max_reload", "Maximum number of times a insufficient list is attempted to be reloaded",
         OFFSET(max_reload), AV_OPT_TYPE_INT, {.i64 = 1000}, 0, INT_MAX, FLAGS},
+    { "start_time", "set start time in unix time", OFFSET(start_time), AV_OPT_TYPE_INT64,  { .i64 = 0 }, 0, INT64_MAX, AV_OPT_FLAG_ENCODING_PARAM },
     {NULL}
 };
 
