@@ -126,13 +126,20 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt)
  height = frame->height;
  stride = ((frame->width * 24 + 31) & ~31) >> 3;
  
- if(width != st->codecpar->width || height != st->codecpar->height || width < 1 || height < 1 || frame->format != (int)st->codecpar->format)
+ if(width != st->codecpar->width || height != st->codecpar->height || width < 1 || height < 1 || frame->format != (int)st->codecpar->format || frame->linesize[0] < 10)
  {
 	 av_log(s, AV_LOG_ERROR, "Problems with params: %d %d %d %d\n", width, height, st->codecpar->width, st->codecpar->height);
      return -1; 
  }
 
  if(h->current_width != width || h->current_height != height || h->current_format != st->codecpar->format) {
+	 
+	 if(h->current_width != 0 || h->current_height != 0)
+	 {
+		 av_log(s, AV_LOG_ERROR, "RECREATE ERROR\n");
+		 return -1;
+	 }
+	 
 #if defined(__linux__)
   if(h->image_buffer_ptr != MAP_FAILED)
    munmap(h->image_buffer_ptr, h->image_buffer_length);
@@ -218,8 +225,8 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt)
   h->current_format = st->codecpar->format;
  }
  
- h->gray_image_buffer_ptr[0] = 0;
-// memset(h->gray_image_buffer_ptr, 0, h->gray_image_buffer_length);
+// h->gray_image_buffer_ptr[0] = 0;
+ memset(h->gray_image_buffer_ptr, 0, h->gray_image_buffer_length);
 /*
  memcpy(h->gray_image_buffer_ptr, frame->data[0], h->gray_image_buffer_length);
 
