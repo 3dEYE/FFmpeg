@@ -177,17 +177,15 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt)
   }
 
   h->gray_image_buffer_length = frame->linesize[0] * height;
-  
-  alloc_length = h->gray_image_buffer_length + ALIGN;
 
-  if(ftruncate(h->gray_image_file_handle, alloc_length) != 0) {
+  if(ftruncate(h->gray_image_file_handle, h->gray_image_buffer_length) != 0) {
     av_log(s, AV_LOG_ERROR, "Shared gray image file \"%s\" truncate failed\n", filename);
     close(h->gray_image_file_handle);
     h->gray_image_file_handle = -1;
     return -1;
   }
 
-  h->gray_image_buffer_ptr = mmap(NULL, alloc_length, PROT_WRITE, MAP_SHARED, h->gray_image_file_handle, 0);
+  h->gray_image_buffer_ptr = mmap(NULL, h->gray_image_buffer_length, PROT_WRITE, MAP_SHARED, h->gray_image_file_handle, 0);
 
   if(h->gray_image_buffer_ptr == MAP_FAILED) {
     av_log(s, AV_LOG_ERROR, "Map gray image file \"%s\" failed\n", filename);
