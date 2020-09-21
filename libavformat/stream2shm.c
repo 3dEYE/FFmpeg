@@ -125,6 +125,12 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt)
  width  = frame->width;
  height = frame->height;
  stride = ((frame->width * 24 + 31) & ~31) >> 3;
+ 
+ if(width != st->codecpar->width || height != st->codecpar->height || width < 1 || height < 1 || frame->format != (int)st->codecpar->format)
+ {
+	 av_log(s, AV_LOG_ERROR, "Problems with params: %d %d %d %d\n", width, height, st->codecpar->width, st->codecpar->height);
+     return -1; 
+ }
 
  if(h->current_width != width || h->current_height != height || h->current_format != st->codecpar->format) {
 #if defined(__linux__)
