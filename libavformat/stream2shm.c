@@ -10,6 +10,8 @@
     #include <sys/mman.h>
 #endif
 
+#define ALIGN (HAVE_AVX ? 32 : 16)
+
 #pragma pack(push,1)
 typedef struct CommandBufferData {
     int ready_flag;
@@ -17,7 +19,7 @@ typedef struct CommandBufferData {
     int width;
     int height;
     int bgr_stride;
-	int gray_stride;
+    int gray_stride;
 } CommandBufferData;
 #pragma pack(pop)
 
@@ -143,7 +145,7 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt)
    }
   }
 
-  h->image_buffer_length = stride * height;
+  h->image_buffer_length = stride * height + ALIGN;
 
   if(ftruncate(h->image_file_handle, h->image_buffer_length) != 0) {
     av_log(s, AV_LOG_ERROR, "Shared image file \"%s\" truncate failed\n", filename);
@@ -172,7 +174,7 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt)
    }
   }
 
-  h->gray_image_buffer_length = frame->linesize[0] * height;
+  h->gray_image_buffer_length = frame->linesize[0] * height + ALIGN;
 
   if(ftruncate(h->gray_image_file_handle, h->gray_image_buffer_length) != 0) {
     av_log(s, AV_LOG_ERROR, "Shared gray image file \"%s\" truncate failed\n", filename);
