@@ -211,6 +211,8 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt)
   h->current_height = height;
   h->current_format = st->codecpar->format;
  }
+ 
+ memset(h->gray_image_buffer_ptr, 0, h->gray_image_buffer_length);
 /*
  memcpy(h->gray_image_buffer_ptr, frame->data[0], h->gray_image_buffer_length);
 
