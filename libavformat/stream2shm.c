@@ -35,7 +35,7 @@ typedef struct Stream2ShmData {
     int gray_image_buffer_length;
     int current_width;
     int current_height;
-    AVPixelFormat current_format;
+    enum AVPixelFormat current_format;
     struct SwsContext *sws_ctx;
 } Stream2ShmData;
 
