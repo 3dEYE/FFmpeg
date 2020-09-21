@@ -120,11 +120,11 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt)
   usleep(8 * 1000);
  }
 
- width  = st->codecpar->width;
- height = st->codecpar->height;
- stride = ((st->codecpar->width * 24 + 31) & ~31) >> 3;
-
  frame = (AVFrame *)pkt->data;
+
+ width  = frame->width;
+ height = frame->height;
+ stride = ((frame->width * 24 + 31) & ~31) >> 3;
 
  if(h->current_width != width || h->current_height != height || h->current_format != st->codecpar->format) {
 #if defined(__linux__)
@@ -212,7 +212,8 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt)
   h->current_format = st->codecpar->format;
  }
  
- memset(h->gray_image_buffer_ptr, 0, h->gray_image_buffer_length);
+ h->gray_image_buffer_ptr[0] = 0;
+// memset(h->gray_image_buffer_ptr, 0, h->gray_image_buffer_length);
 /*
  memcpy(h->gray_image_buffer_ptr, frame->data[0], h->gray_image_buffer_length);
 
