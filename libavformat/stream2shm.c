@@ -54,7 +54,10 @@ static int write_header(AVFormatContext *s)
  h->gray_image_buffer_ptr = MAP_FAILED;
  h->image_file_handle = -1;
  h->gray_image_file_handle = -1;
-
+ h->image_buffer_length = 0;
+ h->gray_image_buffer_length = 0;
+ h->sws_ctx = NULL;
+ 
  h->cmd_file_handle = shm_open(s->url, O_RDWR, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
 
  if(h->cmd_file_handle == -1) {
@@ -75,7 +78,7 @@ static int write_header(AVFormatContext *s)
  h->current_width = 0;
  h->current_height = 0;
  h->current_format = AV_PIX_FMT_NONE;
-
+ 
  return 0;
 }
 
