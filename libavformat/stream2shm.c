@@ -156,7 +156,7 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt)
     return -1;
   }
 
-  h->image_buffer_ptr = mmap(NULL, alloc_length, PROT_WRITE, MAP_SHARED, h->image_file_handle, 0);
+  h->image_buffer_ptr = mmap(NULL, alloc_length, PROT_READ | PROT_WRITE, MAP_SHARED, h->image_file_handle, 0);
 
   if(h->image_buffer_ptr == MAP_FAILED) {
     av_log(s, AV_LOG_ERROR, "Map image file \"%s\" failed\n", filename);
@@ -185,7 +185,7 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt)
     return -1;
   }
 
-  h->gray_image_buffer_ptr = mmap(NULL, h->gray_image_buffer_length, PROT_WRITE, MAP_SHARED, h->gray_image_file_handle, 0);
+  h->gray_image_buffer_ptr = mmap(NULL, h->gray_image_buffer_length, PROT_READ | PROT_WRITE, MAP_SHARED, h->gray_image_file_handle, 0);
 
   if(h->gray_image_buffer_ptr == MAP_FAILED) {
     av_log(s, AV_LOG_ERROR, "Map gray image file \"%s\" failed\n", filename);
