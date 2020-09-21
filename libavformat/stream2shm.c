@@ -209,9 +209,9 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt)
   h->current_height = height;
   h->current_format = st->codecpar->format;
  }
-/*
- memcpy(h->gray_image_buffer_ptr, frame->data[0], h->gray_image_buffer_length);
 
+ memcpy(h->gray_image_buffer_ptr, frame->data[0], h->gray_image_buffer_length);
+/*
  if(sws_scale(h->sws_ctx, (const uint8_t * const*)frame->data, frame->linesize, 0, height, (uint8_t **)&h->image_buffer_ptr, &stride) != height)
   return -1;
 */
