@@ -15,7 +15,8 @@ typedef struct CommandBufferData {
     uint64_t timestamp;
     int width;
     int height;
-    int stride;
+    int bgr_stride;
+	int gray_stride;
 } CommandBufferData;
 #pragma pack(pop)
 
@@ -33,6 +34,7 @@ typedef struct Stream2ShmData {
     int gray_image_buffer_length;
     int current_width;
     int current_height;
+    AVPixelFormat current_format;
     struct SwsContext *sws_ctx;
 } Stream2ShmData;
 
@@ -116,11 +118,11 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt)
 
  width  = st->codecpar->width;
  height = st->codecpar->height;
- stride = st->codecpar->width * 3;
+ stride = ((st->codecpar->width * 24 + 31) & ~31) >> 3;
 
  frame = (AVFrame *)pkt->data;
 
- if(h->current_width != width || h->current_height != height) {
+ if(h->current_width != width || h->current_height != height || h->current_format != st->codecpar->format) {
 #if defined(__linux__)
   if(h->image_buffer_ptr != MAP_FAILED)
    munmap(h->image_buffer_ptr, h->image_buffer_length);
@@ -168,7 +170,7 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt)
    }
   }
 
-  h->gray_image_buffer_length = width * height;
+  h->gray_image_buffer_length = frame->linesize[0] * height;
 
   if(ftruncate(h->gray_image_file_handle, h->gray_image_buffer_length) != 0) {
     av_log(s, AV_LOG_ERROR, "Shared gray image file \"%s\" truncate failed\n", filename);
@@ -192,7 +194,7 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt)
    sws_freeContext(h->sws_ctx);
 
   h->sws_ctx = sws_getContext(width, height, st->codecpar->format, width, height, AV_PIX_FMT_BGR24,
-             SWS_FAST_BILINEAR, NULL, NULL, NULL);
+             SWS_BILINEAR, NULL, NULL, NULL);
 
   if(h->sws_ctx == NULL) {
     av_log(s, AV_LOG_ERROR, "Could not initialize the conversion context\n");
@@ -201,6 +203,7 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt)
 
   h->current_width = width;
   h->current_height = height;
+  h->current_format = st->codecpar->format;
  }
 
  memcpy(h->gray_image_buffer_ptr, frame->data[0], h->gray_image_buffer_length);
@@ -213,7 +216,8 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt)
  cbd->timestamp = *s->timestamp_base + pkt->pts * 1000 * time_base->num / time_base->den;
  cbd->width = width;
  cbd->height = height;
- cbd->stride = stride;
+ cbd->bgr_stride = stride;
+ cbd->gray_stride = frame->linesize[0];
  cbd->ready_flag = 1;
 
  return 0;
