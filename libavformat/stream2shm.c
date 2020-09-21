@@ -1,7 +1,8 @@
 #include "libavutil/pixdesc.h"
+#include "libavutil/pixfmt.h"
 #include "avio_internal.h"
 #include "internal.h"
-#include <libswscale/swscale.h>
+#include "libswscale/swscale.h"
 #include <unistd.h>
 
 #if defined(__linux__)
