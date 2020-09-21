@@ -72,6 +72,7 @@ static int write_header(AVFormatContext *s)
 
  h->current_width = 0;
  h->current_height = 0;
+ h->current_format = AV_PIX_FMT_NONE;
 
  return 0;
 }
