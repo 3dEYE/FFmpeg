@@ -120,11 +120,11 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt)
   usleep(8 * 1000);
  }
 
- width  = st->codecpar->width;
- height = st->codecpar->height;
- stride = ((st->codecpar->width * 24 + 31) & ~31) >> 3;
-
  frame = (AVFrame *)pkt->data;
+  
+ width  = frame->width;
+ height = frame->height;
+ stride = frame->width * 3;
 
  if(h->current_width != width || h->current_height != height || h->current_format != st->codecpar->format) {
 #if defined(__linux__)
@@ -145,16 +145,18 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt)
    }
   }
 
-  h->image_buffer_length = stride * height + ALIGN;
+  h->image_buffer_length = stride * height;
+  
+  int capacity = h->image_buffer_length + ALIGN;
 
-  if(ftruncate(h->image_file_handle, h->image_buffer_length) != 0) {
+  if(ftruncate(h->image_file_handle, capacity) != 0) {
     av_log(s, AV_LOG_ERROR, "Shared image file \"%s\" truncate failed\n", filename);
     close(h->image_file_handle);
     h->image_file_handle = -1;
     return -1;
   }
 
-  h->image_buffer_ptr = mmap(NULL, h->image_buffer_length, PROT_WRITE, MAP_SHARED, h->image_file_handle, 0);
+  h->image_buffer_ptr = mmap(NULL, capacity, PROT_WRITE, MAP_SHARED, h->image_file_handle, 0);
 
   if(h->image_buffer_ptr == MAP_FAILED) {
     av_log(s, AV_LOG_ERROR, "Map image file \"%s\" failed\n", filename);
@@ -174,7 +176,7 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt)
    }
   }
 
-  h->gray_image_buffer_length = frame->linesize[0] * height + ALIGN;
+  h->gray_image_buffer_length = frame->linesize[0] * height;
 
   if(ftruncate(h->gray_image_file_handle, h->gray_image_buffer_length) != 0) {
     av_log(s, AV_LOG_ERROR, "Shared gray image file \"%s\" truncate failed\n", filename);
@@ -234,7 +236,7 @@ static int write_trailer(struct AVFormatContext *s)
 #if defined(__linux__)
 
  if(h->image_buffer_ptr != MAP_FAILED)
-   munmap(h->image_buffer_ptr, h->image_buffer_length);
+   munmap(h->image_buffer_ptr, h->image_buffer_length + ALIGN);
 
  if(h->image_file_handle != -1 )
   close(h->image_file_handle);
