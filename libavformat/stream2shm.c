@@ -117,7 +117,7 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt)
   if (ff_check_interrupt(&s->interrupt_callback))
    return AVERROR_EXIT;
             
-  usleep(8 * 1000);
+  usleep(16 * 1000);
  }
 
  frame = (AVFrame *)pkt->data;
