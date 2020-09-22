@@ -41,6 +41,17 @@ typedef struct Stream2ShmData {
     struct SwsContext *sws_ctx;
 } Stream2ShmData;
 
+static int round_to_powerof2(int x)
+{
+	x = x - 1;
+	x = x | (x >> 1);
+	x = x | (x >> 2);
+	x = x | (x >> 4);
+	x = x | (x >> 8);
+	x = x | (x >> 16);
+	return x + 1;
+}
+
 static int write_header(AVFormatContext *s)
 {
  Stream2ShmData *h = (Stream2ShmData *)s->priv_data;
@@ -65,7 +76,7 @@ static int write_header(AVFormatContext *s)
    return -1;
  }
 
- h->cmd_buffer_ptr = mmap(NULL, COMMAND_BUFFER_LENGTH, PROT_READ | PROT_WRITE, MAP_SHARED, h->cmd_file_handle, 0);
+ h->cmd_buffer_ptr = mmap(NULL, round_to_powerof2(COMMAND_BUFFER_LENGTH), PROT_READ | PROT_WRITE, MAP_SHARED, h->cmd_file_handle, 0);
 
  if(h->cmd_buffer_ptr == MAP_FAILED) {
    av_log(s, AV_LOG_ERROR, "Map Command file \"%s\" failed\n", s->url);
@@ -153,7 +164,7 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt)
   snprintf(filename, sizeof(filename), "%s_img", s->url);
 
   if(h->image_file_handle == -1 ) {
-     h->image_file_handle = shm_open(filename, O_RDWR | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
+     h->image_file_handle = shm_open(filename, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
 
    if(h->image_file_handle == -1) {
      av_log(s, AV_LOG_ERROR, "Shared image file \"%s\" create failed\n", filename);
@@ -163,7 +174,7 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt)
 
   h->image_buffer_length = stride * height;
   
-  int alloc_length = h->image_buffer_length + ALIGN;
+  int alloc_length = round_to_powerof2(h->image_buffer_length);//h->image_buffer_length + ALIGN;
 
   if(ftruncate(h->image_file_handle, alloc_length) != 0) {
     av_log(s, AV_LOG_ERROR, "Shared image file \"%s\" truncate failed\n", filename);
@@ -184,7 +195,7 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt)
   snprintf(filename, sizeof(filename), "%s_gray_img", s->url);
 
   if(h->gray_image_file_handle == -1 ) {
-    h->gray_image_file_handle = shm_open(filename, O_RDWR | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
+    h->gray_image_file_handle = shm_open(filename, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
 
    if(h->gray_image_file_handle == -1) {
      av_log(s, AV_LOG_ERROR, "Shared gray image file \"%s\" create failed\n", filename);
@@ -193,15 +204,17 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt)
   }
 
   h->gray_image_buffer_length = frame->linesize[0] * height;
+  
+  alloc_length = round_to_powerof2(h->gray_image_buffer_length);
 
-  if(ftruncate(h->gray_image_file_handle, h->gray_image_buffer_length) != 0) {
+  if(ftruncate(h->gray_image_file_handle, alloc_length) != 0) {
     av_log(s, AV_LOG_ERROR, "Shared gray image file \"%s\" truncate failed\n", filename);
     close(h->gray_image_file_handle);
     h->gray_image_file_handle = -1;
     return -1;
   }
 
-  h->gray_image_buffer_ptr = mmap(NULL, h->gray_image_buffer_length, PROT_READ | PROT_WRITE, MAP_SHARED, h->gray_image_file_handle, 0);
+  h->gray_image_buffer_ptr = mmap(NULL, alloc_length, PROT_READ | PROT_WRITE, MAP_SHARED, h->gray_image_file_handle, 0);
 
   if(h->gray_image_buffer_ptr == MAP_FAILED) {
     av_log(s, AV_LOG_ERROR, "Map gray image file \"%s\" failed\n", filename);
@@ -255,19 +268,19 @@ static int write_trailer(struct AVFormatContext *s)
 #if defined(__linux__)
 
  if(h->image_buffer_ptr != MAP_FAILED)
-   munmap(h->image_buffer_ptr, h->image_buffer_length);
+   munmap(h->image_buffer_ptr, round_to_powerof2(h->image_buffer_length));
 
  if(h->image_file_handle != -1 )
   close(h->image_file_handle);
 
  if(h->gray_image_buffer_ptr != MAP_FAILED)
-   munmap(h->gray_image_buffer_ptr, h->gray_image_buffer_length);
+   munmap(h->gray_image_buffer_ptr, round_to_powerof2(h->gray_image_buffer_length));
 
  if(h->gray_image_file_handle != -1 )
   close(h->gray_image_file_handle);
  
  if(h->cmd_buffer_ptr != MAP_FAILED)
-  munmap(h->cmd_buffer_ptr, COMMAND_BUFFER_LENGTH);
+  munmap(h->cmd_buffer_ptr, round_to_powerof2(COMMAND_BUFFER_LENGTH));
 
  if(h->cmd_file_handle != -1 )
   close(h->cmd_file_handle);
