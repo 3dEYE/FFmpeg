@@ -43,13 +43,14 @@ typedef struct Stream2ShmData {
 
 static int round_to_powerof2(int x)
 {
-	x = x - 1;
+	            return (x + 4096 - 1) / 4096 * 4096;
+/*	x = x - 1;
 	x = x | (x >> 1);
 	x = x | (x >> 2);
 	x = x | (x >> 4);
 	x = x | (x >> 8);
 	x = x | (x >> 16);
-	return x + 1;
+	return x + 1;*/
 }
 
 static int write_header(AVFormatContext *s)
