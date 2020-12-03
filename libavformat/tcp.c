@@ -43,6 +43,7 @@ typedef struct TCPContext {
     int send_buffer_size;
 } TCPContext;
 
+#define DEFAULT_TCP_BUFFER_SIZE 256 * 1024
 #define OFFSET(x) offsetof(TCPContext, x)
 #define D AV_OPT_FLAG_DECODING_PARAM
 #define E AV_OPT_FLAG_ENCODING_PARAM
@@ -142,12 +143,15 @@ static int tcp_open(URLContext *h, const char *uri, int flags)
 
     /* Set the socket's send or receive buffer sizes, if specified.
        If unspecified or setting fails, system default is used. */
-    if (s->recv_buffer_size > 0) {
-        setsockopt (fd, SOL_SOCKET, SO_RCVBUF, &s->recv_buffer_size, sizeof (s->recv_buffer_size));
-    }
-    if (s->send_buffer_size > 0) {
-        setsockopt (fd, SOL_SOCKET, SO_SNDBUF, &s->send_buffer_size, sizeof (s->send_buffer_size));
-    }
+    if (s->recv_buffer_size <= 0)
+        s->recv_buffer_size = DEFAULT_TCP_BUFFER_SIZE;
+    	
+	setsockopt (fd, SOL_SOCKET, SO_RCVBUF, &s->recv_buffer_size, sizeof (s->recv_buffer_size));
+	
+    if (s->send_buffer_size <= 0)
+        s->send_buffer_size = DEFAULT_TCP_BUFFER_SIZE;
+    	
+	setsockopt (fd, SOL_SOCKET, SO_SNDBUF, &s->send_buffer_size, sizeof (s->send_buffer_size));
 
     if (s->listen == 2) {
         // multi-client
