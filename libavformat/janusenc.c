@@ -137,7 +137,7 @@ static char *read_json_value(const char *str, const char *field, char *value_buf
   }
 
   length = field_end_pos - field_start_pos;
-  memcpy_s(value_buffer, value_buffer_size, field_start_pos, length);
+  memcpy(value_buffer, field_start_pos, value_buffer_size >= length ? length : value_buffer_size);
 
   if(length < value_buffer_size)
     value_buffer[length] = '\0';
@@ -162,7 +162,7 @@ static int open_http_context(AVFormatContext *s, URLContext **h, AVIOInterruptCB
 
     if (port < 0)
     {
-       if(strcmpi(proto, "https") == 0)
+       if(av_strcasecmp(proto, "https") == 0)
          port = 443;
        else
          port = 80;
@@ -231,7 +231,7 @@ static int send_http_json_request(AVFormatContext *s, const char *path, const ch
       goto fail;
    }
 
-   if(strcmpi(status, "success") != 0)
+   if(av_strcasecmp(status, "success") != 0)
    {
       av_log(s, AV_LOG_ERROR, "Server error response: %s\n", status);
       ret = -2;
@@ -954,7 +954,7 @@ static int create_janus_mountpoint(AVFormatContext *s, const char *admin_key, co
 
   if(error_code != NULL)
   {
-    if(strcmpi(error_code, "456") != 0)
+    if(av_strcasecmp(error_code, "456") != 0)
     {
        av_log(s, AV_LOG_ERROR, "Unknown error code in json response: %s\n", error_code);
        ret = -10002;
