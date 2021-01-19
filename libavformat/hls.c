@@ -118,6 +118,7 @@ struct playlist {
     struct segment **segments;
     int needed;
     int cur_seq_no;
+    int prev_seq_no;
     int64_t cur_seg_offset;
     int64_t last_load_time;
 
@@ -158,6 +159,7 @@ struct playlist {
      * playlist, if any. */
     int n_init_sections;
     struct segment **init_sections;
+    int64_t first_segment_pts;
 };
 
 /*
@@ -213,8 +215,6 @@ typedef struct HLSContext {
     int64_t start_time;
     int64_t last_pts;
     int64_t timestamp_base;
-    int64_t first_segment_pts;
-    int64_t first_segment_timestamp;
 } HLSContext;
 
 static void free_segment_dynarray(struct segment **segments, int n_segments)
@@ -1819,7 +1819,6 @@ static int hls_read_header(AVFormatContext *s)
     c->cur_timestamp = AV_NOPTS_VALUE;
     c->timestamp_base = AV_NOPTS_VALUE;
     c->last_pts = 0;
-    c->first_segment_pts = 0;
     c->first_segment_timestamp = 0;
     s->timestamp_base = &c->timestamp_base;
 	
@@ -1893,6 +1892,8 @@ static int hls_read_header(AVFormatContext *s)
             continue;
 
         pls->cur_seq_no = select_cur_seq_no(c, pls);
+        pls->prev_seq_no = pls->cur_seq_no;
+        pls->first_segment_pts = AV_NOPTS_VALUE;
         highest_cur_seq_no = FFMAX(highest_cur_seq_no, pls->cur_seq_no);
     }
 
@@ -1923,6 +1924,7 @@ static int hls_read_header(AVFormatContext *s)
         if (!pls->finished && pls->cur_seq_no == highest_cur_seq_no - 1 &&
             highest_cur_seq_no < pls->start_seq_no + pls->n_segments) {
             pls->cur_seq_no = highest_cur_seq_no;
+            pls->prev_seq_no = pls->cur_seq_no;
         }
 
         pls->read_buffer = av_malloc(INITIAL_BUFFER_SIZE);
@@ -2025,8 +2027,6 @@ static int recheck_discard_flags(AVFormatContext *s, int first)
             changed = 1;
             pls->cur_seq_no = select_cur_seq_no(c, pls);
             pls->pb.eof_reached = 0;
-            c->first_segment_pts = 0;
-            c->first_segment_timestamp = 0;
             if (c->cur_timestamp != AV_NOPTS_VALUE) {
                 /* catch up */
                 pls->seek_timestamp = c->cur_timestamp;
@@ -2211,21 +2211,23 @@ static int hls_read_packet(AVFormatContext *s, AVPacket *pkt)
 
         *pkt = pls->pkt;
 
+        if (pls->first_segment_pts == AV_NOPTS_VALUE)
+            pls->first_segment_pts = pkt->pts;
+    	
          if(c->timestamp_base == AV_NOPTS_VALUE) {
             c->timestamp_base = current_segment(pls)->timestamp;
-            c->first_segment_timestamp = 0;
-            pkt->pts = 0;
-            c->first_segment_pts = pls->pkt.pts;
-         }
-        else if (c->first_segment_pts == 0) {
-           c->first_segment_timestamp = av_rescale_q((current_segment(pls)->timestamp - c->timestamp_base) * 1000, AV_TIME_BASE_Q,
-                                    ist->time_base);
-           pkt->pts = c->first_segment_timestamp;
-           c->first_segment_pts = pls->pkt.pts;
+         	pkt->pts = 0;
         }
-        else
-           pkt->pts = c->first_segment_timestamp + pls->pkt.pts - c->first_segment_pts;
-        
+        else {
+        	
+             if (pls->cur_seq_no != pls->prev_seq_no) {
+                 pls->first_segment_pts = pkt->pts;
+                 pls->prev_seq_no = pls->cur_seq_no;
+             }
+        	
+             pkt->pts = av_rescale_q((current_segment(pls)->timestamp - c->timestamp_base) * 1000, AV_TIME_BASE_Q, ist->time_base) + pkt->pts - c->first_segment_pts;
+        }
+
         c->last_pts = pls->pkt.pts;
 
         pkt->stream_index = st->index;
