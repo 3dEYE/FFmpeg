@@ -2224,7 +2224,7 @@ static int hls_read_packet(AVFormatContext *s, AVPacket *pkt)
                  pls->prev_seq_no = pls->cur_seq_no;
              }
         	
-             pkt->pts = av_rescale_q((current_segment(pls)->timestamp - c->timestamp_base) * 1000, AV_TIME_BASE_Q, ist->time_base) + pkt->pts - pls->first_segment_pts;
+             pkt->pts = av_rescale_q((current_segment(pls)->timestamp - c->timestamp_base), (AVRational) { 1, 1000 }, ist->time_base) + pkt->pts - pls->first_segment_pts;
         }
 
         c->last_pts = pls->pkt.pts;
