@@ -1819,7 +1819,6 @@ static int hls_read_header(AVFormatContext *s)
     c->cur_timestamp = AV_NOPTS_VALUE;
     c->timestamp_base = AV_NOPTS_VALUE;
     c->last_pts = 0;
-    c->first_segment_timestamp = 0;
     s->timestamp_base = &c->timestamp_base;
 	
     if ((ret = save_avio_options(s)) < 0)
@@ -2225,7 +2224,7 @@ static int hls_read_packet(AVFormatContext *s, AVPacket *pkt)
                  pls->prev_seq_no = pls->cur_seq_no;
              }
         	
-             pkt->pts = av_rescale_q((current_segment(pls)->timestamp - c->timestamp_base) * 1000, AV_TIME_BASE_Q, ist->time_base) + pkt->pts - c->first_segment_pts;
+             pkt->pts = av_rescale_q((current_segment(pls)->timestamp - c->timestamp_base) * 1000, AV_TIME_BASE_Q, ist->time_base) + pkt->pts - pls->first_segment_pts;
         }
 
         c->last_pts = pls->pkt.pts;
