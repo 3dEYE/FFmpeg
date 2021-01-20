@@ -39,6 +39,7 @@ typedef struct Stream2ShmData {
     int current_height;
     enum AVPixelFormat current_format;
     struct SwsContext *sws_ctx;
+    int64_t previous_timestamp;
 } Stream2ShmData;
 
 static int write_header(AVFormatContext *s)
@@ -75,7 +76,7 @@ static int write_header(AVFormatContext *s)
  h->current_width = 0;
  h->current_height = 0;
  h->current_format = AV_PIX_FMT_NONE;
-
+ h->previous_timestamp = 0;
  return 0;
 }
 
@@ -225,6 +226,14 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt)
  cbd->bgr_stride = stride;
  cbd->gray_stride = frame->linesize[0];
  cbd->ready_flag = 1;
+
+ if (h->previous_timestamp && (cbd->timestamp - h->previous_timestamp) / 1000 > 30)
+ {
+     av_log(s, AV_LOG_ERROR, "bad time\n");
+     return AVERROR_BUFFER_TOO_SMALL;
+ }
+
+ h->previous_timestamp = cbd->timestamp;
 
  return 0;
 }
