@@ -219,7 +219,7 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt)
 
  time_base = &s->streams[pkt->stream_index]->time_base;
 
- cbd->timestamp = *s->timestamp_base + pkt->pts * time_base->num / time_base->den * 1000;
+ cbd->timestamp = av_rescale_q(pkt->pts, ist->time_base, (AVRational) { 1, 1000 });//pkt->pts * 1000 * time_base->num / time_base->den;
  cbd->width = width;
  cbd->height = height;
  cbd->bgr_stride = stride;
