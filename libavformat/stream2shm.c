@@ -225,7 +225,7 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt)
  cbd->bgr_stride = stride;
  cbd->gray_stride = frame->linesize[0];
 #if defined(__linux__)
- __sync_synchronize()
+ __sync_synchronize();
 #endif
  cbd->ready_flag = 1;
 
