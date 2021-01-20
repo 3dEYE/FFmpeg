@@ -2127,7 +2127,6 @@ static int open_output_file(OptionsContext *o, const char *filename)
         print_error(filename, err);
         exit_program(1);
     }
-    oc->timestamp_base = input_files[0]->ctx->timestamp_base;
     of->ctx = oc;
     if (o->recording_time != INT64_MAX)
         oc->duration = o->recording_time;

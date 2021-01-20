@@ -1982,7 +1982,7 @@ static int dash_read_header(AVFormatContext *s)
     int stream_index = 0;
     int i;
 
-    s->timestamp_base = &c->timestamp_base;
+    //s->timestamp_base = &c->timestamp_base;
     c->interrupt_callback = &s->interrupt_callback;
 
     if ((ret = save_avio_options(s)) < 0)
