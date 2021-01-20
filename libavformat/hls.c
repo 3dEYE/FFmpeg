@@ -2243,7 +2243,7 @@ static int hls_read_packet(AVFormatContext *s, AVPacket *pkt)
 
         if (pls->last_pts != AV_NOPTS_VALUE && av_rescale_q(pkt->pts - pls->last_pts, ist->time_base, (AVRational) { 1, 1 }) > 30)
         {
-            av_log(s, AV_LOG_ERROR, "bad time, current: %d, previous: %d\n", current_segment(pls)->timestamp / 1000, pls->segments[pls->cur_seq_no - 1 - pls->start_seq_no] / 1000);
+            av_log(s, AV_LOG_ERROR, "bad time, current: %d, previous: %d\n", current_segment(pls)->timestamp / 1000, pls->segments[pls->cur_seq_no - 1 - pls->start_seq_no]->timestamp / 1000);
             return AVERROR_BUFFER_TOO_SMALL;
         }
 
