@@ -213,7 +213,6 @@ typedef struct HLSContext {
     int http_multiple;
     AVIOContext *playlist_pb;
     int64_t start_time;
-    int64_t last_pts;
 } HLSContext;
 
 static void free_segment_dynarray(struct segment **segments, int n_segments)
@@ -1816,7 +1815,6 @@ static int hls_read_header(AVFormatContext *s)
     c->first_packet = 1;
     c->first_timestamp = AV_NOPTS_VALUE;
     c->cur_timestamp = AV_NOPTS_VALUE;
-    c->last_pts = 0;
 	
     if ((ret = save_avio_options(s)) < 0)
         goto fail;
@@ -2225,7 +2223,6 @@ static int hls_read_packet(AVFormatContext *s, AVPacket *pkt)
         }
         
         pkt->pts = av_rescale_q(current_segment(pls)->timestamp, (AVRational) { 1, 1000 }, ist->time_base) + pts_diff;
-        c->last_pts = pls->pkt.pts;
 
         pkt->stream_index = st->index;
         reset_packet(&c->playlists[minplaylist]->pkt);
