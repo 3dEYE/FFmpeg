@@ -8,7 +8,6 @@
 #if defined(__linux__)
     #include <fcntl.h>
     #include <sys/mman.h>
-    #include <asm/system.h>
 #endif
 
 #define ALIGN (HAVE_AVX ? 32 : 16)
@@ -226,7 +225,7 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt)
  cbd->bgr_stride = stride;
  cbd->gray_stride = frame->linesize[0];
 #if defined(__linux__)
- mb();
+ __sync_synchronize()
 #endif
  cbd->ready_flag = 1;
 
