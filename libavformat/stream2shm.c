@@ -84,7 +84,7 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt)
  int height;
  int stride;
  AVFrame *frame;
- AVRational *time_base;
+ AVRational time_base;
  CommandBufferData *cbd = (CommandBufferData *)h->cmd_buffer_ptr;
  char filename[512];
 
@@ -214,7 +214,7 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt)
  if(sws_scale(h->sws_ctx, (const uint8_t * const*)frame->data, frame->linesize, 0, height, (uint8_t **)&h->image_buffer_ptr, &stride) != height)
   return -1;
 
- time_base = &s->streams[pkt->stream_index]->time_base;
+ time_base = s->streams[pkt->stream_index]->time_base;
 
  cbd->timestamp = av_rescale_q(pkt->pts, time_base, (AVRational) { 1, 1000 });
  cbd->width = width;
