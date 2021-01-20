@@ -44,6 +44,9 @@ typedef struct Stream2ShmData {
 static int write_header(AVFormatContext *s)
 {
  Stream2ShmData *h = (Stream2ShmData *)s->priv_data;
+ 
+ if(s->timestamp_base == NULL)
+  return -1;
 
 #if defined(__linux__)
 
@@ -216,7 +219,7 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt)
 
  time_base = s->streams[pkt->stream_index]->time_base;
 
- cbd->timestamp = av_rescale_q(pkt->pts, time_base, (AVRational) { 1, 1000 });
+ cbd->timestamp = *s->timestamp_base + av_rescale_q(pkt->pts, time_base, (AVRational) { 1, 1000 });
  cbd->width = width;
  cbd->height = height;
  cbd->bgr_stride = stride;
