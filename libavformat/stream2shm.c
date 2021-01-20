@@ -44,9 +44,6 @@ typedef struct Stream2ShmData {
 static int write_header(AVFormatContext *s)
 {
  Stream2ShmData *h = (Stream2ShmData *)s->priv_data;
- 
- if(s->timestamp_base == NULL)
-  return -1;
 
 #if defined(__linux__)
 
