@@ -161,6 +161,7 @@ struct playlist {
 
     int64_t first_segment_pts;
     int64_t first_segment_timestamp;
+    int64_t last_pts;
 };
 
 /*
@@ -1895,6 +1896,7 @@ static int hls_read_header(AVFormatContext *s)
         highest_cur_seq_no = FFMAX(highest_cur_seq_no, pls->cur_seq_no);
         pls->first_segment_pts = AV_NOPTS_VALUE;
         pls->first_segment_timestamp = AV_NOPTS_VALUE;
+        pls->last_pts = AV_NOPTS_VALUE;
     }
 
     /* Open the demuxer for each playlist */
@@ -2238,6 +2240,14 @@ static int hls_read_packet(AVFormatContext *s, AVPacket *pkt)
         }
         else
             pkt->pts = pls->first_segment_timestamp + pkt->pts - pls->first_segment_pts;
+
+        if (pls->last_pst != AV_NOPTS_VALUE && av_rescale_q(pkt->pts - pls->last_pst, ist->time_base, (AVRational) { 1, 1 }) > 30)
+        {
+            av_log(s, AV_LOG_ERROR, "bad time, current: %d, previous: %d\n", current_segment(pls)->timestamp / 1000, pls->segments[pls->cur_seq_no - 1 - pls->start_seq_no] / 1000);
+            return AVERROR_BUFFER_TOO_SMALL;
+        }
+
+        pls->last_pst = pkt->pts;
 
         return 0;
     }
