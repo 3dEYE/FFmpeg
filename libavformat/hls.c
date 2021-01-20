@@ -2254,13 +2254,9 @@ static int hls_read_packet(AVFormatContext* s, AVPacket* pkt)
 
 		*pkt = pls->pkt;
 
-		if (c->timestamp_base == AV_NOPTS_VALUE) {
+		if (c->timestamp_base == AV_NOPTS_VALUE)
 			c->timestamp_base = current_segment(pls)->timestamp;
-			pkt->pts = 0;
-		}
-		else 
-			pkt->pts = av_rescale_q(c->timestamp_base, (AVRational) { 1, 1000 }, ist->time_base) + pkt->pts;
-		
+
 		pkt->stream_index = st->index;
 		reset_packet(&c->playlists[minplaylist]->pkt);
 
