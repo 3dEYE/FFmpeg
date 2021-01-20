@@ -214,7 +214,6 @@ typedef struct HLSContext {
     AVIOContext *playlist_pb;
     int64_t start_time;
     int64_t last_pts;
-    int64_t timestamp_base;
 } HLSContext;
 
 static void free_segment_dynarray(struct segment **segments, int n_segments)
@@ -1817,9 +1816,7 @@ static int hls_read_header(AVFormatContext *s)
     c->first_packet = 1;
     c->first_timestamp = AV_NOPTS_VALUE;
     c->cur_timestamp = AV_NOPTS_VALUE;
-    c->timestamp_base = AV_NOPTS_VALUE;
     c->last_pts = 0;
-    s->timestamp_base = &c->timestamp_base;
 	
     if ((ret = save_avio_options(s)) < 0)
         goto fail;
@@ -2210,23 +2207,24 @@ static int hls_read_packet(AVFormatContext *s, AVPacket *pkt)
 
         *pkt = pls->pkt;
 
-        if (pls->first_segment_pts == AV_NOPTS_VALUE)
+        int64_t pts_diff;
+
+        if (pls->first_segment_pts == AV_NOPTS_VALUE) {
             pls->first_segment_pts = pkt->pts;
-    	
-         if(c->timestamp_base == AV_NOPTS_VALUE) {
-            c->timestamp_base = current_segment(pls)->timestamp;
-         	pkt->pts = 0;
+            pts_diff = 0;
         }
         else {
-        	
-             if (pls->cur_seq_no != pls->prev_seq_no) {
-                 pls->first_segment_pts = pkt->pts;
-                 pls->prev_seq_no = pls->cur_seq_no;
-             }
-        	
-             pkt->pts = av_rescale_q((current_segment(pls)->timestamp), (AVRational) { 1, 1000 }, ist->time_base);// +pkt->pts - pls->first_segment_pts;
+            if (pls->cur_seq_no != pls->prev_seq_no) {
+                pls->first_segment_pts = pkt->pts;
+                pls->prev_seq_no = pls->cur_seq_no;
+                pts_diff = 0;
+            }
+            else {
+                pts_diff = pkt->pts - pls->first_segment_pts;
+            }
         }
-
+        
+        pkt->pts = av_rescale_q(current_segment(pls)->timestamp, (AVRational) { 1, 1000 }, ist->time_base) + pts_diff;
         c->last_pts = pls->pkt.pts;
 
         pkt->stream_index = st->index;
