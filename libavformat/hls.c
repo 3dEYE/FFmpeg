@@ -158,6 +158,9 @@ struct playlist {
      * playlist, if any. */
     int n_init_sections;
     struct segment **init_sections;
+
+    int64_t first_segment_dts;
+    int64_t first_segment_timestamp;
 };
 
 /*
@@ -212,8 +215,6 @@ typedef struct HLSContext {
     AVIOContext *playlist_pb;
     int64_t start_time;
     int64_t timestamp_base;
-    int64_t first_segment_dts;
-    int64_t first_segment_timestamp;
 } HLSContext;
 
 static void free_segment_dynarray(struct segment **segments, int n_segments)
@@ -1819,8 +1820,6 @@ static int hls_read_header(AVFormatContext *s)
     c->first_timestamp = AV_NOPTS_VALUE;
     c->cur_timestamp = AV_NOPTS_VALUE;
     c->timestamp_base = AV_NOPTS_VALUE;
-    c->first_segment_dts = AV_NOPTS_VALUE;
-    c->first_segment_timestamp = AV_NOPTS_VALUE;
     s->timestamp_base = &c->timestamp_base;
 	
     if ((ret = save_avio_options(s)) < 0)
@@ -1894,6 +1893,8 @@ static int hls_read_header(AVFormatContext *s)
 
         pls->cur_seq_no = select_cur_seq_no(c, pls);
         highest_cur_seq_no = FFMAX(highest_cur_seq_no, pls->cur_seq_no);
+        pls->first_segment_dts = AV_NOPTS_VALUE;
+        pls->first_segment_timestamp = AV_NOPTS_VALUE;
     }
 
     /* Open the demuxer for each playlist */
@@ -2230,13 +2231,13 @@ static int hls_read_packet(AVFormatContext *s, AVPacket *pkt)
         if (c->timestamp_base == AV_NOPTS_VALUE)
             c->timestamp_base = current_segment(pls)->timestamp;
                 
-        if (c->first_segment_dts == AV_NOPTS_VALUE) {
-            c->first_segment_timestamp = av_rescale_q(current_segment(pls)->timestamp - c->timestamp_base, (AVRational) { 1, 1000 }, ist->time_base);
-            c->first_segment_dts = pkt->dts;
-            pkt->dts = c->first_segment_timestamp;
+        if (pls->first_segment_dts == AV_NOPTS_VALUE) {
+            pls->first_segment_timestamp = av_rescale_q(current_segment(pls)->timestamp - c->timestamp_base, (AVRational) { 1, 1000 }, ist->time_base);
+            pls->first_segment_dts = pkt->dts;
+            pkt->dts = pls->first_segment_timestamp;
         }
         else
-            pkt->dts = c->first_segment_timestamp + pkt->dts - c->first_segment_dts;
+            pkt->dts = pls->first_segment_timestamp + pkt->dts - pls->first_segment_dts;
 
         return 0;
     }
