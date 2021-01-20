@@ -168,7 +168,7 @@ typedef struct DASHContext {
     int is_init_section_common_video;
     int is_init_section_common_audio;
 
-    int64_t timestamp_base;
+    uint64_t timestamp_base;
 
 } DASHContext;
 
@@ -1604,7 +1604,7 @@ static struct fragment *get_current_fragment(struct representation *pls)
             return NULL;
         }
         currentTime = get_segment_start_time_based_on_timeline(pls, pls->cur_seq_no);
-        c->timestamp_base =  (int64_t)c->availability_start_time_ms;
+        c->timestamp_base =  c->availability_start_time_ms;
         ff_dash_fill_tmpl_params(tmpfilename, c->max_url_size, pls->url_template, 0, pls->cur_seq_no, 0, currentTime);
         seg->url = av_strireplace(pls->url_template, pls->url_template, tmpfilename);
         if (!seg->url) {

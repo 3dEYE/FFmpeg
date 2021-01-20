@@ -1945,7 +1945,7 @@ typedef struct AVFormatContext {
      */
     int skip_estimate_duration_from_pts;
 
-    int64_t *timestamp_base;
+    uint64_t *timestamp_base;
 } AVFormatContext;
 
 #if FF_API_FORMAT_GET_SET
