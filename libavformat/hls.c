@@ -2237,7 +2237,7 @@ static int hls_read_packet(AVFormatContext *s, AVPacket *pkt)
             pkt->pts = pls->first_segment_timestamp;
         }
         else
-            pkt->pts = pls->first_segment_timestamp + av_rescale_q(76, (AVRational) { 1, 1000 }, ist->time_base);// pkt->pts - pls->first_segment_pts;
+            pkt->pts = pls->first_segment_timestamp + pkt->pts - pls->first_segment_pts;
 
         return 0;
     }
