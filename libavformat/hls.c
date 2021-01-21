@@ -160,7 +160,6 @@ struct playlist {
     struct segment **init_sections;
 
     int64_t first_segment_pts;
-    int64_t first_segment_timestamp;
 };
 
 /*
@@ -1534,8 +1533,6 @@ reload:
 
     c->cur_seq_no = v->cur_seq_no;
 
-    v->first_segment_pts = AV_NOPTS_VALUE;
-
     goto restart;
 }
 
@@ -1893,8 +1890,6 @@ static int hls_read_header(AVFormatContext *s)
 
         pls->cur_seq_no = select_cur_seq_no(c, pls);
         highest_cur_seq_no = FFMAX(highest_cur_seq_no, pls->cur_seq_no);
-        pls->first_segment_pts = AV_NOPTS_VALUE;
-        pls->first_segment_timestamp = AV_NOPTS_VALUE;
     }
 
     /* Open the demuxer for each playlist */
@@ -2228,16 +2223,13 @@ static int hls_read_packet(AVFormatContext *s, AVPacket *pkt)
             }
         }
 
-        if (c->timestamp_base == AV_NOPTS_VALUE)
+        if (c->timestamp_base == AV_NOPTS_VALUE) {
             c->timestamp_base = current_segment(pls)->timestamp;
-                
-        if (pls->first_segment_pts == AV_NOPTS_VALUE) {
-            pls->first_segment_timestamp = av_rescale_q(current_segment(pls)->timestamp - c->timestamp_base, (AVRational) { 1, 1000 }, ist->time_base);
             pls->first_segment_pts = pkt->pts;
-            pkt->pts = pls->first_segment_timestamp;
+            pkt->pts = 0;
         }
         else
-            pkt->pts = pls->first_segment_timestamp + pkt->pts - pls->first_segment_pts;
+            pkt->pts -= pls->first_segment_pts;
 
         return 0;
     }
