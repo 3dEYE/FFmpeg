@@ -382,7 +382,7 @@ static av_cold int wmavoice_decode_init(AVCodecContext *ctx)
                ctx->extradata_size);
         return AVERROR_INVALIDDATA;
     }
-    if (ctx->block_align <= 0) {
+    if (ctx->block_align <= 0 || ctx->block_align > (1<<22)) {
         av_log(ctx, AV_LOG_ERROR, "Invalid block alignment %d.\n", ctx->block_align);
         return AVERROR_INVALIDDATA;
     }
@@ -632,12 +632,14 @@ static void calc_input_response(WMAVoiceContext *s, float *lpcs,
     for (n = 0; n <= 64; n++) {
         float pwr;
 
-        idx = FFMAX(0, lrint((max - lpcs[n]) * irange) - 1);
+        idx = lrint((max - lpcs[n]) * irange - 1);
+        idx = FFMAX(0, idx);
         pwr = wmavoice_denoise_power_table[s->denoise_strength][idx];
         lpcs[n] = angle_mul * pwr;
 
         /* 70.57 =~ 1/log10(1.0331663) */
-        idx = (pwr * gain_mul - 0.0295) * 70.570526123;
+        idx = av_clipf((pwr * gain_mul - 0.0295) * 70.570526123, 0, INT_MAX / 2);
+
         if (idx > 127) { // fall back if index falls outside table range
             coeffs[n] = wmavoice_energy_table[127] *
                         powf(1.0331663, idx - 127);
@@ -1835,6 +1837,9 @@ static int parse_packet_header(WMAVoiceContext *s)
     skip_bits(gb, 4);          // packet sequence number
     s->has_residual_lsps = get_bits1(gb);
     do {
+        if (get_bits_left(gb) < 6 + s->spillover_bitsize)
+            return AVERROR_INVALIDDATA;
+
         res = get_bits(gb, 6); // number of superframes per packet
                                // (minus first one if there is spillover)
         n_superframes += res;
