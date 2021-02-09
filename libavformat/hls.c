@@ -158,8 +158,6 @@ struct playlist {
      * playlist, if any. */
     int n_init_sections;
     struct segment **init_sections;
-
-    int64_t first_segment_pts;
 };
 
 /*
@@ -214,6 +212,8 @@ typedef struct HLSContext {
     AVIOContext *playlist_pb;
     int64_t start_time;
     int64_t timestamp_base;
+    int64_t first_segment_pts;
+    int64_t first_segment_timestamp;
 } HLSContext;
 
 static void free_segment_dynarray(struct segment **segments, int n_segments)
@@ -1817,6 +1817,8 @@ static int hls_read_header(AVFormatContext *s)
     c->first_timestamp = AV_NOPTS_VALUE;
     c->cur_timestamp = AV_NOPTS_VALUE;
     c->timestamp_base = AV_NOPTS_VALUE;
+    c->first_segment_pts = 0;
+    c->first_segment_timestamp = 0;
     s->timestamp_base = &c->timestamp_base;
 	
     if ((ret = save_avio_options(s)) < 0)
@@ -2021,6 +2023,8 @@ static int recheck_discard_flags(AVFormatContext *s, int first)
             changed = 1;
             pls->cur_seq_no = select_cur_seq_no(c, pls);
             pls->pb.eof_reached = 0;
+            c->first_segment_pts = 0;
+            c->first_segment_timestamp = 0;
             if (c->cur_timestamp != AV_NOPTS_VALUE) {
                 /* catch up */
                 pls->seek_timestamp = c->cur_timestamp;
@@ -2205,14 +2209,21 @@ static int hls_read_packet(AVFormatContext *s, AVPacket *pkt)
 
         *pkt = pls->pkt;
 
+         if(c->timestamp_base == AV_NOPTS_VALUE)
+            c->timestamp_base = current_segment(pls)->timestamp;
+                
+		if (c->first_segment_pts == 0) {
+           c->first_segment_timestamp = av_rescale_q(current_segment(pls)->timestamp - c->timestamp_base, (AVRational) { 1, 1000 }, ist->time_base);
+           c->first_segment_pts = pkt->pts;
+           pkt->pts = c->first_segment_timestamp;
+        }
+        else
+           pkt->pts = c->first_segment_timestamp + pkt->pts - c->first_segment_pts;
+        
+		pkt->dts = pkt->pts;
         pkt->stream_index = st->index;
         reset_packet(&c->playlists[minplaylist]->pkt);
 
-        if (pkt->dts != AV_NOPTS_VALUE) {
-            c->cur_timestamp = av_rescale_q(pkt->dts,
-                                            ist->time_base,
-                                            AV_TIME_BASE_Q);
-	}
         /* There may be more situations where this would be useful, but this at least
          * handles newly probed codecs properly (i.e. request_probe by mpegts). */
         if (ist->codecpar->codec_id != st->codecpar->codec_id) {
@@ -2222,14 +2233,6 @@ static int hls_read_packet(AVFormatContext *s, AVPacket *pkt)
                 return ret;
             }
         }
-
-        if (c->timestamp_base == AV_NOPTS_VALUE) {
-            c->timestamp_base = current_segment(pls)->timestamp;
-            pls->first_segment_pts = pkt->pts;
-            pkt->pts = 0;
-        }
-        else
-            pkt->pts -= pls->first_segment_pts;
 
         return 0;
     }
