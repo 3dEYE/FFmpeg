@@ -1646,17 +1646,24 @@ static int select_cur_seq_no(HLSContext *c, struct playlist *pls)
         else {
 
          if(c->start_time > 0) {
-           while(1) {
+           int continue_search;
+           do {
+             continue_search = 0;
              for (int i = pls->n_segments - 1; i > -1; i--) 
                  if(pls->segments[i]->timestamp <= c->start_time) {
-                   if(pls->segments[i]->timestamp + av_rescale_q(pls->segments[i]->duration, AV_TIME_BASE_Q, (AVRational) { 1, 1000 }) > c->start_time) {
+                    if(pls->segments[i]->timestamp + av_rescale_q(pls->segments[i]->duration, AV_TIME_BASE_Q, (AVRational) { 1, 1000 }) > c->start_time)
                      return pls->start_seq_no + i;
-                   }  
+                   else if(i < pls->n_segments - 1)
+                     return pls->start_seq_no + i + 1;
+                     
                    av_usleep(2000*1000);
                    parse_playlist(c, pls->url, pls, NULL);
+                   continue_search = 1;
                    break; 
                  }
-            }
+            } while(continue_search);
+
+            return pls->start_seq_no;
           }
         
           /* If this is a live stream, start live_start_index segments from the
