@@ -214,6 +214,7 @@ typedef struct HLSContext {
     int64_t timestamp_base;
     int64_t first_segment_pts;
     int64_t first_segment_timestamp;
+    int64_t last_segment_timestamp;
 } HLSContext;
 
 static void free_segment_dynarray(struct segment **segments, int n_segments)
@@ -2224,18 +2225,23 @@ static int hls_read_packet(AVFormatContext *s, AVPacket *pkt)
 
         *pkt = pls->pkt;
 
+        struct segment *seg = current_segment(pls);
+
          if(c->timestamp_base == AV_NOPTS_VALUE)
-            c->timestamp_base = current_segment(pls)->timestamp;
+            c->timestamp_base = seg->timestamp;
                 
-		if (c->first_segment_pts == 0) {
-           c->first_segment_timestamp = av_rescale_q(current_segment(pls)->timestamp - c->timestamp_base, (AVRational) { 1, 1000 }, ist->time_base);
+	if (c->first_segment_pts == 0) {
+           c->first_segment_timestamp = av_rescale_q(seg->timestamp - c->timestamp_base, (AVRational) { 1, 1000 }, ist->time_base);
+           c->last_segment_timestamp = c->first_segment_timestamp + av_rescale_q(seg->duration, AV_TIME_BASE_Q, ist->time_base);
            c->first_segment_pts = pkt->pts;
            pkt->pts = c->first_segment_timestamp;
         }
-        else
+        else if(pkt->pts <= c->last_segment_timestamp)
            pkt->pts = c->first_segment_timestamp + pkt->pts - c->first_segment_pts;
-        
-		pkt->dts = pkt->pts;
+        else
+           pkt->pts = c->last_segment_timestamp;
+
+        pkt->dts = pkt->pts;
         pkt->stream_index = st->index;
         reset_packet(&c->playlists[minplaylist]->pkt);
 
