@@ -1534,6 +1534,9 @@ reload:
 
     c->cur_seq_no = v->cur_seq_no;
 
+    c->first_segment_pts = 0;
+    c->first_segment_timestamp = 0;
+
     goto restart;
 }
 
@@ -2236,10 +2239,13 @@ static int hls_read_packet(AVFormatContext *s, AVPacket *pkt)
            c->first_segment_pts = pkt->pts;
            pkt->pts = c->first_segment_timestamp;
         }
-        else if(pkt->pts <= c->last_segment_timestamp)
-           pkt->pts = c->first_segment_timestamp + pkt->pts - c->first_segment_pts;
         else
-           pkt->pts = c->last_segment_timestamp;
+        {
+           pkt->pts = c->first_segment_timestamp + pkt->pts - c->first_segment_pts;
+        
+           if(pkt->pts > c->last_segment_timestamp)
+             pkt->pts = c->last_segment_timestamp;
+        }
 
         pkt->dts = pkt->pts;
         pkt->stream_index = st->index;
