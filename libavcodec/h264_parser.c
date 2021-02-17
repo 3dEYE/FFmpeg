@@ -570,6 +570,10 @@ static int h264_parse(AVCodecParserContext *s,
     ParseContext *pc = &p->pc;
     int next;
 
+    //dirty hack, try to avoid in future:
+    s->pts = s->cur_frame_pts[s->cur_frame_start_index];
+    s->dts = s->cur_frame_dts[s->cur_frame_start_index];
+
     if (!p->got_first) {
         p->got_first = 1;
         if (avctx->extradata_size) {
