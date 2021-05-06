@@ -23,13 +23,12 @@ static const AVOption framerateexact_options[] = {
 AVFILTER_DEFINE_CLASS(framerateexact);
 
 static av_cold int init(AVFilterContext *ctx)
-{
+{    
     FrameRateContext *frc = ctx->priv;
 
     frc->previous_pts = AV_NOPTS_VALUE;
     frc->delta_sum = 0;
-    frc->frame_interval = 1000 * frc->frame_rate.den / frc->frame_rate.num;
-    
+
     return 0;
 }
 
@@ -37,9 +36,13 @@ static int config_output_props(AVFilterLink *outlink)
 {
     AVFilterContext *ctx = outlink->src;
     AVFilterLink *inlink  = ctx->inputs[0];
+    FrameRateContext *frc = inlink->dst->priv;
+
+    frc->frame_interval = inlink->time_base.den / inlink->time_base.num * 
+                          frc->frame_rate.den / frc->frame_rate.num;
 
     outlink->time_base  = inlink->time_base;
-    outlink->frame_rate = inlink->frame_rate;
+    outlink->frame_rate = frc->frame_rate;
 
     return 0;
 }
@@ -56,7 +59,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *ref)
         frc->delta_sum += ref->pts - frc->previous_pts;
         frc->previous_pts = ref->pts;
               
-        if(frc->delta_sum * 1000 * inlink->time_base.num / inlink->time_base.den >= frc->frame_interval) {
+        if(frc->delta_sum >= frc->frame_interval) {
             frc->delta_sum = frc->delta_sum % frc->frame_interval;           
 
             return ff_filter_frame(inlink->dst->outputs[0], ref);
